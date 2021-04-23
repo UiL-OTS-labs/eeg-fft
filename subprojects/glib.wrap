@@ -1,5 +1,0 @@
-[wrap-git]
-
-url = https://gitlab.gnome.org/GNOME/glib
-revision = master
-depth=4
