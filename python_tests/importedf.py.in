@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import os.path
+
+GI_REPOSITORIES = {
+    "GLib": "2.0",
+    "Gio": "2.0",
+    "Edf": "@VERSION@"
+}
+
+import gi
+gi.require_versions(GI_REPOSITORIES)
+from gi.repository import GLib, Edf
+

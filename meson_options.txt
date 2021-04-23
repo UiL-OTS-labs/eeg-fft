@@ -1,0 +1,17 @@
+
+option(
+    'build-unit-test',
+    type : 'boolean',
+    value : true,
+    description : 'build the unit tests'
+)
+
+option (
+    'prefer-subproject',
+    type : 'boolean',
+    value : false,
+    description : 'Prefer subproject ' +
+                  'over regular depedencies ' +
+                  '(glib must be in $PROJECT_HOME/subprojects' +
+                  '(handy for debug build of g-lib/object)'
+)

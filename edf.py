@@ -149,12 +149,21 @@ class EdfHeader:
             ) -> typing.List[int]:
         strlist = EdfHeader._read_label_list(fileobj, nbytes, ntot)
         return [int(string) for string in strlist]
+    
+    @staticmethod
+    def _read_float_list(
+            fileobj:typing.BinaryIO,
+            nbytes,
+            ntot
+            ) -> typing.List[float]:
+        strlist = EdfHeader._read_label_list(fileobj, nbytes, ntot)
+        return [float(string) for string in strlist]
 
     def _read_version(self, fileobj: typing.BinaryIO):
         version_bytes = fileobj.read(self.LEN_8BYTE)
         if version_bytes[0] != 255: 
             version_str = version_bytes.rstrip().decode('ascii')
-            self.version = int(version)
+            self.version = int(version_str)
         else: # BioSemi format
             if version_bytes[1:].decode('ascii') != "BIOSEMI":
                 raise ValueError("Invalid or unknow format")
@@ -209,14 +218,14 @@ class EdfHeader:
         )
 
     def _read_physical_min(self, fileobj : typing.BinaryIO):
-        self.physical_min = EdfHeader._read_int_list(
+        self.physical_min = EdfHeader._read_float_list(
             fileobj,
             self.LEN_8BYTE,
             self.num_signals
             )
     
     def _read_physical_max(self, fileobj : typing.BinaryIO):
-        self.physical_max = EdfHeader._read_int_list(
+        self.physical_max = EdfHeader._read_float_list(
             fileobj,
             self.LEN_8BYTE,
             self.num_signals
@@ -261,7 +270,7 @@ class EdfHeader:
             "EdfHeader(" +
             repr(self.version) + ", " +
             repr(self.loc_patient_info) + ", " +
-            repr(self.loc_patient_info) + ", " +
+            repr(self.loc_rec_info) + ", " +
             repr(self.date) + ", " +
             repr(self.reserved1) + ", " +
             repr(self.num_header_bytes) + ", " +
@@ -280,15 +289,23 @@ class EdfHeader:
         )
         return rep_str
 
-def _read_edf_samples(fileobj : typing.BinaryIO, num_samples):
+def _read_2byte_samples(fileobj : typing.BinaryIO, num_samples):
     """Read values from a regular edf file"""
     for i in range(num_samples):
         yield int.from_bytes(fileobj.read(2), 'little')
 
-def _read_bdf_samples(fileobj : typing.BinaryIO, num_samples):
+def _read_3byte_samples(fileobj : typing.BinaryIO, num_samples):
     """Read values from a regular edf file"""
     for i in range(num_samples):
         yield int.from_bytes(fileobj.read(3), 'little')
+
+def _read_bdf_trigstatus(fileobj : typing.BinaryIO, num_samples : int):
+    for i in range(num_samples):
+        triglow = int.from_bytes(fileobj.read(1), 'little', signed=False)
+        trighigh = int.from_bytes(fileobj.read(1), 'little', signed=False)
+        status = int.from_bytes(fileobj.read(1), 'little', signed=False)
+        yield triglow | (trighigh << 8)
+        yield status
 
 class EdfFile:
     '''
@@ -313,9 +330,9 @@ class EdfFile:
                 num_samples = self.header.num_samples_per_record[signal]
                 samples = None
                 if not self.header.is_biosemi():
-                    samples = list(_read_edf_samples(fileobj, num_samples))
+                    samples = list(_read_2byte_samples(fileobj, num_samples))
                 else:
-                    samples = list(_read_bdf_samples(fileobj, num_samples))
+                    samples = list(_read_3byte_samples(fileobj, num_samples))
                 output[signal].extend(samples)
         self.samples = output
 
@@ -335,6 +352,55 @@ class EdfFile:
     
     def __repr__(self) -> str:
         return "EdfFile({}, {})".format(repr(self.header), repr(self.samples))
+
+class BdfFile(EdfFile):
+    ''' The biosemi bdf flavor of European Data Format '''
+    LABEL_TRIGSTATUS = "Triggers and Status"
+    
+    def __init__(self, header : EdfHeader = EdfHeader(), samples=[[]], triggers=[], status=[]):
+        """Initializes an empty Edf class containing a header with default
+        values.
+        """
+        super().__init__(header, samples)
+        self.triggers = triggers
+        self.status = status
+    
+    def _read_samples(self, fileobj: typing.BinaryIO):
+        """ Read the samples base upon the header information
+        """
+        num_records = self.header.num_data_records
+        num_signals = self.header.num_signals
+
+        # -1 because the last signal is for triggers and status
+        # which are stored seperately
+        output = [[] for i in range(num_signals - 1)]
+        self.signals = []
+        self.status = []
+        for record in range(num_records):
+            for signal in range(num_signals):
+                num_samples = self.header.num_samples_per_record[signal]
+                samples = None
+                if self.header.tranducer[signal] == BdfFile.LABEL_TRIGSTATUS:
+                    trigstatus = list(_read_bdf_trigstatus(fileobj, num_samples))
+                    triggers = trigstatus[::2]
+                    status = trigstatus[1::2]
+                    self.triggers.extend(triggers)
+                    self.status.extend(status)
+                else:
+                    samples = list(_read_3byte_samples(fileobj, num_samples))
+                    output[signal].extend(samples)
+        self.samples = output
+
+    @classmethod
+    def from_fileobj(cls, fileobj: typing.BinaryIO):
+        """Read a BdfFile from a file"""
+        bdfinstance = BdfFile()
+        bdfinstance.header.from_file(fileobj)
+        bdfinstance._read_samples(fileobj)
+        return bdfinstance
+    
+    def __repr__(self) -> str:
+        return "BdfFile({}, {})".format(repr(self.header), repr(self.samples))
 
 if __name__ == "__main__":
     import argparse as ap
