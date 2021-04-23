@@ -16,7 +16,5 @@ class TestEdfFile (unittest.TestCase):
         outfile = Edf.File()
         signal1 = Edf.Signal()
         signal2 = Edf.Signal()
-        signal1.props.sr = 1000
-        signal2.props.sr = 1000
 
 
