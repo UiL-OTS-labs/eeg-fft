@@ -8,8 +8,9 @@
  * SECTION:edf-file
  * @short_description: an object that reads/writes data in European Data Format
  * @see_also: #EdfSignal, #EdfHeader
+ * @include: gedf.h
  *
- * #EdfFile is a file that contains a #EdfHeader and a number of #EdfSignals
+ * #EdfFile is a file that contains a #EdfHeader and a number of #EdfSignal s
  * The header describes how many and what kind of signals are embedded in this
  * file. More information about the Edf format can be obtained from:
  * <ulink url="https://www.edfplus.info/specs/edf.html">edfplus.info</ulink>
@@ -27,6 +28,7 @@ typedef enum {
     PROP_FILENAME = 1,
     PROP_HEADER,
     PROP_SIGNALS,
+    PROP_NUM_SIGNALS,
     N_PROPS
 } EdfFileProperties;
 
@@ -61,27 +63,6 @@ edf_file_finalize(GObject* object)
     (void) priv;
 
     G_OBJECT_CLASS(edf_file_parent_class)->finalize(object);
-}
-
-static void
-file_set_filename(EdfFile* file, const gchar* name)
-{
-    EdfFilePrivate* priv = edf_file_get_instance_private(file);
-    GFile* dup = g_file_new_for_path(name);
-    g_return_if_fail(dup);
-    g_object_unref(priv->file);
-    priv->file = dup;
-}
-
-static void
-file_set_signals(EdfFile* file, GPtrArray* signals)
-{
-    EdfFilePrivate *priv = edf_file_get_instance_private (file);
-    g_ptr_array_set_size (priv->signals, 0);
-    for (gsize i = 0; i < signals->len; i++) {
-        EdfSignal *sig = g_ptr_array_index(signals, i);
-        g_ptr_array_add (priv->signals, sig);
-    }
 }
 
 static void
@@ -161,12 +142,13 @@ edf_file_set_property(
 
     switch((EdfFileProperties) propid) {
         case PROP_FILENAME:
-            file_set_filename(file, g_value_get_string(value));
+            edf_file_set_path(file, g_value_get_string(value));
             break;
         case PROP_SIGNALS:
-            file_set_signals(file, g_value_get_boxed (value));
+            edf_file_set_signals(file, g_value_get_boxed (value));
             break;
-        case PROP_HEADER:
+        case PROP_HEADER: // Read only
+        case PROP_NUM_SIGNALS:
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, propid, spec);
     }
@@ -185,17 +167,16 @@ edf_file_get_property(
 
     switch((EdfFileProperties) propid) {
         case PROP_FILENAME:
-            {
-                char* path = g_file_get_path(priv->file);
-                g_value_set_string (value, path);
-                g_free(path);
-            }
+            g_value_take_string(value, edf_file_get_path(file));
             break;
         case PROP_HEADER:
             g_value_set_object(value, priv->header);
             break;
         case PROP_SIGNALS:
             g_value_set_boxed(value, priv->signals);
+            break;
+        case PROP_NUM_SIGNALS:
+            g_value_set_uint(value, priv->signals->len);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, propid, spec);
@@ -215,14 +196,29 @@ edf_file_class_init(EdfFileClass* klass)
     object_class->dispose  = edf_file_dispose;
     object_class->finalize = edf_file_finalize;
 
+    /**
+     * EdfFile:path:
+     *
+     * The path proeprty. This should be set to the name
+     * of the out-/input file of this file. This should be done
+     * prior to reading from or writing to the file. A in or
+     * output stream is opened on the basis of this path.
+     */
     edf_file_properties[PROP_FILENAME] = g_param_spec_string(
-            "fn",
+            "path",
             "file-name",
             "The name of the file to write/read to/from.",
             "",
             G_PARAM_READWRITE | G_PARAM_CONSTRUCT
             );
 
+    /**
+     * EdfFile:header:
+     *
+     * Every file contains a header it changes on basis of the
+     * number and type of signals that are embedded in the file.
+     *
+     */
     edf_file_properties [PROP_HEADER] = g_param_spec_object(
             "header",
             "Header",
@@ -232,7 +228,11 @@ edf_file_class_init(EdfFileClass* klass)
             );
 
     /**
-     * signals:
+     * EdfFile:signals:
+     *
+     * Every file contains (hopefully) some signals that contain
+     * the actual data of one transcucer. The signals document
+     * what type of data is gathered.
      */
     edf_file_properties [PROP_SIGNALS] = g_param_spec_boxed(
         "signals",
@@ -242,11 +242,34 @@ edf_file_class_init(EdfFileClass* klass)
         G_PARAM_READWRITE
     );
 
+    /**
+     * OdfFile:num_signals:
+     *
+     * This property allows for looping over the number of signals.
+     * It boils down to the length of the array containing the 
+     * #EdfSignal's.
+     */
+    edf_file_properties[PROP_NUM_SIGNALS] = g_param_spec_uint(
+        "num-signals",
+        "Number of signals",
+        "The number of signals contained in the file",
+        0,
+        G_MAXUINT,
+        0,
+        G_PARAM_READABLE
+    );
+
+
     g_object_class_install_properties(
             object_class, N_PROPS, edf_file_properties
             );
 }
 
+/**
+ * edf_file_new:(constructor)
+ *
+ * Returns a new EdfFile.
+ */
 EdfFile*
 edf_file_new()
 {
@@ -258,6 +281,14 @@ edf_file_new()
     return file;
 }
 
+/**
+ * edf_file_new_for_path:(constructor)
+ * @path :(in): the path for the file in utf8
+ *
+ * Create a new edf file 
+ *
+ * Returns: (transfer full): a freshly created file
+ */
 EdfFile*
 edf_file_new_for_path(const gchar* path)
 {
@@ -265,44 +296,74 @@ edf_file_new_for_path(const gchar* path)
 
     EdfFile* file = g_object_new(
             EDF_TYPE_FILE,
-            "fn", path,
+            "path", path,
             NULL
             );
 
     return file;
 }
 
+
+/**
+ * edf_file_destroy:destructor
+ * @file:(in): the EdfFile to destroy
+ *
+ * Decrements the ref count on the file and the file
+ * will be destroyed when the count drops to zero.
+ * This is equal to calling g_object_unref(G_OBJECT(file));
+ */
 void
 edf_file_destroy(EdfFile* file)
 {
     g_object_unref(file);
 }
 
-void
-edf_file_set_path(EdfFile* file, const gchar* fname)
-{
-    g_return_if_fail(EDF_IS_FILE(file));
-    g_return_if_fail(file != NULL);
-    g_object_set(
-            file,
-            "fn", fname,
-            NULL
-            );
-}
-
-gchar*
+/**
+ * edf_file_get_path:
+ * @file : (in) : the EdfFile whose name we would like to know
+ *
+ * Returns :(transfer full): the path of where to open/store
+ *                           the contents. Returns NULL when not applicable
+ */
+char*
 edf_file_get_path(EdfFile* file)
 {
-    gchar* ret = NULL;
     g_return_val_if_fail(EDF_IS_FILE(file), NULL);
-    g_object_get(
-            file,
-            "fn", &ret,
-            NULL
-            );
-    return ret;
+    EdfFilePrivate* priv =  edf_file_get_instance_private(file);
+    
+    return g_file_get_path(priv->file);
 }
 
+/**
+ * edf_file_set_path:
+ * @file:(in): The file whose name we want to alter
+ * @path:(in): The file path to a name where we can open
+ *             a file for reading or writing
+ */
+void
+edf_file_set_path(EdfFile* file, const char* path)
+{
+    g_return_if_fail(file != NULL);
+    g_return_if_fail(EDF_IS_FILE(file));
+    g_return_if_fail(path != NULL);
+    
+    EdfFilePrivate* priv = edf_file_get_instance_private(file);
+    GFile* dup = g_file_new_for_path(path);
+    g_return_if_fail(dup);
+    g_object_unref(priv->file);
+    priv->file = dup;
+}
+
+
+/**
+ * edf_file_read:
+ * @self the EdfFile
+ * @error:(out): If an error occurs it is returned here.
+ *
+ * Opens the file for reading. The property fn should be
+ * set to a path of a valid edf file. Otherwise havoc will
+ * occur.
+ */
 gsize
 edf_file_read(EdfFile* file, GError** error)
 {
@@ -355,6 +416,15 @@ fail:
     return num_bytes_tot;
 }
 
+/**
+ * edf_file_create:
+ * @error:(out): An error will be returned here when the
+ *               file cannot be written or it exists.
+ *
+ * Write all the signals and header to disc. This method
+ * will fail if the file already exists or another reason
+ * for being unable to read the file.
+ */
 void
 edf_file_create(EdfFile* file, GError**error)
 {
@@ -378,6 +448,14 @@ edf_file_create(EdfFile* file, GError**error)
     g_object_unref(outstream);
 }
 
+/**
+ * edf_file_replace:
+ * @error:(out): An error will be returned here when the
+ *               file cannot be written
+ *
+ * The edf file will be written to the currently specified path.
+ * If the file exists, it will be overwritten.
+ */
 void
 edf_file_replace(EdfFile* file, GError**error)
 {
@@ -403,6 +481,15 @@ edf_file_replace(EdfFile* file, GError**error)
     g_object_unref(outstream);
 }
 
+/**
+ * edf_file_add_signal:
+ * @self:The #EdfFile to which you would like to add a signal
+ * @signal:(in)(transfer full): The #EdfSignal you would like to add
+ *
+ * The file will add the signal to its collection of signals, the
+ * reference count of the signal is incremented. So you can release
+ * your reference to the signals.
+ */
 void
 edf_file_add_signal(EdfFile* file, EdfSignal* signal)
 {
@@ -414,28 +501,67 @@ edf_file_add_signal(EdfFile* file, EdfSignal* signal)
     g_ptr_array_add(priv->signals, g_object_ref(signal));
 }
 
-EdfHeader*
-edf_file_header(EdfFile* file)
-{
-    g_return_val_if_fail(EDF_IS_FILE(file), NULL);
-    EdfHeader* hdr;
-    g_object_get(file, "header", &hdr, NULL);
-    return hdr;
-}
-
+/**
+ * edf_file_set_signals:
+ * @self:(in) : the #EdfFile to which to set the signals
+ * @signals:(in)(element-type EdfSignal)(transfer full):
+ */
 void
 edf_file_set_signals(EdfFile* file, GPtrArray* signals) {
     g_return_if_fail(EDF_IS_FILE(file));
     g_return_if_fail(signals);
 
-    g_object_set(file, "signals", signals, NULL);
+    g_object_ref(signals);
+
+    EdfFilePrivate* priv = edf_file_get_instance_private(file);
+    if (priv->signals) {
+        g_clear_object(&priv->signals);
+    }
+
+    priv->signals = signals;    
 }
 
+/**
+ * edf_file_get_signals:
+ * @file:: The from which to obtain the signals.
+ *
+ * Returns:(transfer none)(element-type EdfSignal)
+ */
 GPtrArray*
 edf_file_get_sigals(EdfFile* file)
 {
     g_return_val_if_fail(EDF_IS_FILE(file), NULL);
-    GPtrArray * array = NULL;
-    g_object_get (file, "signals", &array, NULL);
-    return array;
+    EdfFilePrivate* priv =  edf_file_get_instance_private(file);
+    return priv->signals;
 }
+
+/**
+ * edf_file_get_num_signals:
+ * @file: the #EdfFile whose signals you would like to obtains
+ *
+ * Returns: the number of signals or G_MAXUINT incase of error
+ */
+guint
+edf_file_get_num_signals(EdfFile* file)
+{
+    g_return_val_if_fail(EDF_IS_FILE(file), -1);
+    EdfFilePrivate* priv = edf_file_get_instance_private(file);
+    return priv->signals->len;
+}
+
+/**
+ * edf_file_header:
+ * @file : (in)
+ *
+ * Obtains the header of the file.
+ *
+ * Returns:(transfer none): The header of the file.
+ */
+EdfHeader*
+edf_file_header(EdfFile* file)
+{
+    g_return_val_if_fail(EDF_IS_FILE(file), NULL);
+    EdfFilePrivate* priv = edf_file_get_instance_private(file);
+    return priv->header;
+}
+

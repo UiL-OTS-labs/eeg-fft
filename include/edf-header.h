@@ -59,48 +59,15 @@ struct _EdfHeaderClass {
 
 };
 
-/**
- * edf_header_new:(constructor)
- *
- * Create a default new Edf header.
- */
 G_MODULE_EXPORT EdfHeader*
 edf_header_new();
 
-/**
- * edf_header_destroy:(skip)
- * @header :: The header to destroy
- *
- * Decrements the reference of header and will
- * free the associated resources when the refcnt
- * drops to zero.
- */
 G_MODULE_EXPORT void
 edf_header_destroy(EdfHeader* header);
 
-/**
- * edf_header_set_signals :
- * @hdr :(inout): the header object
- * @signals:(in)(transfer full)(element-type EdfSignal): the number of signals 0 < ns < 9999
- *
- * Set the signals that belong to this header.
- *
- * Returns :: TRUE when the operation was successful
- */
 G_MODULE_EXPORT gboolean
 edf_header_set_signals(EdfHeader* hdr, GPtrArray* signals);
 
-/**
- * edf_header_write_to_ostream:
- * @hdr:(in):The header to write to the output stream
- * @ostream:(inout):The output stream to which the header should be written.
- * @error:(out):If an error occurs it will be returned here.
- *
- * Writes an header to an output stream.
- *
- * private: for internal use only
- * Returns::the number of written bytes.
- */
 gsize
 edf_header_write_to_ostream (
         EdfHeader         *hdr,
@@ -108,17 +75,6 @@ edf_header_write_to_ostream (
         GError           **error
         );
 
-/**
- * edf_header_read_from_input_stream:
- * @hdr: An #EdfHeader instance
- * @inputStream :(in)(out): A GInputStream to read
- *                          the header from
- * @error: (out): An error might be returned here
- *
- * Read an header from a input stream.
- *
- * Returns: the number of bytes read.
- */
 gsize
 edf_header_read_from_input_stream(
         EdfHeader     *hdr,
@@ -148,7 +104,7 @@ G_MODULE_EXPORT gboolean
 edf_header_set_time(EdfHeader* header, GDateTime* time);
 
 G_MODULE_EXPORT int
-edf_header_num_bytes(EdfHeader* header);
+edf_header_get_num_bytes(EdfHeader* header);
 
 G_MODULE_EXPORT const char*
 edf_header_get_reserved(EdfHeader* header);
@@ -174,20 +130,6 @@ edf_header_get_num_signals(EdfHeader* header);
 
 /****** utility functions not directly related to EdfHeader instances ******* */
 
-/**
- * edf_compute_header_size
- * @num_signals :: number of signals in the header
- *
- * Computes the header size given the number of signals
- * in the header.
- *
- * The size of the header is 256 bytes for the static part
- * and bytes 256 for each signal.
- *
- * So it should return 256 + 256 * ns;
- *
- * Returns : the number of bytes that the header will take.
- */
 G_MODULE_EXPORT gsize
 edf_compute_header_size(guint num_signals);
 G_END_DECLS

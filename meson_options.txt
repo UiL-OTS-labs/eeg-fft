@@ -15,3 +15,11 @@ option (
                   '(glib must be in $PROJECT_HOME/subprojects' +
                   '(handy for debug build of g-lib/object)'
 )
+
+option (
+    'gtk_doc',
+    type : 'boolean',
+    value : true,
+    description : 'Build documentation using gtkdoc'
+)
+

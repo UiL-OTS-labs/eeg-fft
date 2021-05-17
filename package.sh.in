@@ -1,0 +1,50 @@
+#!/bin/bash
+
+NAME=@NAME@
+VERSION=@VERSION@
+LICENSE=@LICENSE@
+CATEGORY=science
+
+GLIB_NAME=libglib2.0-0
+GLIB_VERSION=@GLIB_VERSION@
+
+#GMODULE_NAME=libgmodule2.0-0
+#GMODULE_VERSION=@GMODULE_VERSION@
+#
+#GIO_NAME=libgio2.0-0
+#GIO_VERSION=@GIO_VERSION@
+
+# temporary directory to install the libgedf to prior to packaging it
+DESTDIR="tmp/gedf-staging"
+
+echo "building"
+if ! ninja; then
+    exit 1;
+fi
+
+echo "run test"
+if ! ninja test; then
+    exit 1;
+fi
+
+echo "installing to ${DESTDIR}"
+
+if ! DESTDIR=${DESTDIR} ninja install; then
+    rm -r ${DESTDIR}
+    exit 1;
+fi
+
+fpm							\
+    -s dir					        \
+    -t deb						\
+    -C ${DESTDIR}					\
+    -n "${NAME}"					\
+    -v "${VERSION}"					\
+    --license "${LICENSE}"				\
+    --category "${CATEGORY}"				\
+    --after-install run-ldconfig.sh			\
+    --after-remove run-ldconfig.sh			\
+    -d "${GLIB_NAME} >= ${GLIB_VERSION}" 		\
+    .
+
+rm -r ${DESTDIR}

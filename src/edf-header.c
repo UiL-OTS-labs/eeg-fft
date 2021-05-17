@@ -845,11 +845,7 @@ edf_header_get_property (
             g_value_set_boxed(value, priv->date_and_time);
             break;
         case PROP_NUM_BYTES_HEADER:
-            g_value_set_uint(
-                value,
-                EDF_BASE_HEADER_SIZE +
-                EDF_SIGNAL_HEADER_SIZE * priv->signals->len
-                );
+            g_value_set_uint(value, edf_header_get_num_bytes(self));
             break;
         case PROP_DURATION_RECORD:
             g_value_set_double(value, priv->duration_of_record);
@@ -904,6 +900,13 @@ edf_header_class_init(EdfHeaderClass* klass)
     klass->read_num_samples_per_rec = read_num_samples_per_rec;
     klass->read_sig_reserved = read_sig_reserved;
 
+    /**
+     * EdfHeader:version:
+     *
+     * The header specifies a version (0 for EDF and EDF+) this
+     * property can obtain that version. It is stored as string in
+     * the header, but turned into an integer for programming.
+     */
     edf_header_properties[PROP_VERSION] = g_param_spec_int(
             "version",
             "Version",
@@ -914,6 +917,12 @@ edf_header_class_init(EdfHeaderClass* klass)
             G_PARAM_READABLE
             );
 
+    /**
+     * EdfHeader:patient-identification:
+     *
+     * This holds some general information about the patient. Edf+ is more strict
+     * on this than EDF is.
+     */
     edf_header_properties[PROP_PATIENT_INFO] = g_param_spec_string(
             "patient-identification",
             "local-patient-identification",
@@ -922,6 +931,12 @@ edf_header_class_init(EdfHeaderClass* klass)
             G_PARAM_READWRITE
             );
     
+    /**
+     * EdfHeader:recording-identification:
+     *
+     * This holds some general information about the recording. Edf+ is more strict
+     * on this than EDF is.
+     */
     edf_header_properties[PROP_REC_INFO] = g_param_spec_string(
             "recording-identification",
             "local-recording-identification",
@@ -930,6 +945,12 @@ edf_header_class_init(EdfHeaderClass* klass)
             G_PARAM_READWRITE
             );
 
+    /**
+     * EdfHeader:date-time:
+     *
+     * An edf header stores the date and time separately in the header, this
+     * member holds both together.
+     */
     edf_header_properties[PROP_DATE_TIME] = g_param_spec_boxed(
             "date-time",
             "Date-Time",
@@ -938,6 +959,12 @@ edf_header_class_init(EdfHeaderClass* klass)
             G_PARAM_READWRITE
             );
 
+    /**
+     * EdfHeader:num-bytes-header:
+     *
+     * This holds the number of bytes that the header will occupy.
+     * Which is 256 + (number of signals * 256).
+     */
     edf_header_properties[PROP_NUM_BYTES_HEADER] = g_param_spec_uint(
             "num-bytes-header",
             "num-bytes-header",
@@ -948,6 +975,11 @@ edf_header_class_init(EdfHeaderClass* klass)
             G_PARAM_READABLE
             );
 
+    /**
+     * EdfHeader:reserved
+     *
+     * Reserved information about this header.
+     */
     edf_header_properties[PROP_RESERVED] = g_param_spec_string(
             "reserved",
             "Reserved",
@@ -956,6 +988,12 @@ edf_header_class_init(EdfHeaderClass* klass)
             G_PARAM_READWRITE
             );
 
+    /**
+     * EdfHeader:num-data_records
+     *
+     * The number of data records per signal. This can be -1 when recording
+     * otherwise it should be >= 0.
+     */
     edf_header_properties[PROP_NUM_DATA_RECORDS] = g_param_spec_int(
             "num-data-records",
             "number-of-data-records",
@@ -966,6 +1004,13 @@ edf_header_class_init(EdfHeaderClass* klass)
             G_PARAM_READABLE
             );
 
+    /**
+     * EdfHeader:duration-of-record:
+     *
+     * The duration of one record. This is typically 1.0 or smaller then 1.0 when
+     * the number of bytes needed to record one record is larger than 61440.
+     * gedflib allows you to pick your own records size.
+     */
     edf_header_properties[PROP_DURATION_RECORD] = g_param_spec_double(
             "duration-of-record",
             "duration-of-record",
@@ -976,6 +1021,12 @@ edf_header_class_init(EdfHeaderClass* klass)
             G_PARAM_READWRITE | G_PARAM_CONSTRUCT
             );
 
+    /**
+     * EdfHeader:num_signals:
+     *
+     * The number of signals helt in this file.
+     * this can be change via adding/removing signals.
+     */
     edf_header_properties[PROP_NUM_SIGNALS] = g_param_spec_uint(
             "num-signals",
             "ns",
@@ -993,6 +1044,11 @@ edf_header_class_init(EdfHeaderClass* klass)
 
 /* ************* public functions ***************** */
 
+/**
+ * edf_header_new:(constructor)
+ *
+ * Create a default new Edf header.
+ */
 EdfHeader*
 edf_header_new() {
     EdfHeader* header;
@@ -1000,11 +1056,28 @@ edf_header_new() {
     return header;
 }
 
+/**
+ * edf_header_destroy:(skip)
+ * @header :: The header to destroy
+ *
+ * Decrements the reference of header and will
+ * free the associated resources when the refcnt
+ * drops to zero.
+ */
 void
 edf_header_destroy(EdfHeader* header) {
     g_object_unref(G_OBJECT(header));
 }
 
+/**
+ * edf_header_set_signals :
+ * @hdr :(inout): the header object
+ * @signals:(in)(transfer full)(element-type EdfSignal): the number of signals 0 < ns < 9999
+ *
+ * Set the signals that belong to this header.
+ *
+ * Returns :: TRUE when the operation was successful
+ */
 gboolean
 edf_header_set_signals(EdfHeader* header, GPtrArray* signals)
 {
@@ -1013,17 +1086,17 @@ edf_header_set_signals(EdfHeader* header, GPtrArray* signals)
     return TRUE;
 }
 
-gsize 
-edf_header_size(EdfHeader* header) {
-    g_return_val_if_fail(EDF_IS_HEADER(header), 0);
-    EdfHeaderPrivate *priv = edf_header_get_instance_private(header);
-    if (priv->signals)
-        return EDF_BASE_HEADER_SIZE + EDF_SIGNAL_HEADER_SIZE * priv->signals->len;
-    else
-        return EDF_BASE_HEADER_SIZE;
-}
-
-
+/**
+ * edf_header_write_to_ostream:
+ * @hdr:(in):The header to write to the output stream
+ * @ostream:(inout):The output stream to which the header should be written.
+ * @error:(out):If an error occurs it will be returned here.
+ *
+ * Writes an header to an output stream.
+ *
+ * private: for internal use only
+ * Returns::the number of written bytes.
+ */
 gsize
 edf_header_write_to_ostream(
         EdfHeader      *header,
@@ -1126,7 +1199,7 @@ edf_header_write_to_ostream(
     
     // Write header size
     memset (buffer, ' ', EDF_NUM_BYTES_IN_HEADER_SZ);
-    g_string_printf(temp, "%d", edf_header_num_bytes(header));
+    g_string_printf(temp, "%d", edf_header_get_num_bytes(header));
     memcpy(buffer,
             temp->str,
             MIN(temp->len, EDF_NUM_BYTES_IN_HEADER_SZ)
@@ -1387,13 +1460,24 @@ edf_header_write_to_ostream(
             goto fail;
     }
 
-    g_assert(written_size == edf_header_size(header));
+    g_assert(written_size == (gsize)edf_header_get_num_bytes(header));
 
 fail:
     g_string_free(temp, TRUE);
     return written_size;
 }
 
+/**
+ * edf_header_read_from_input_stream:
+ * @hdr: An #EdfHeader instance
+ * @inputStream :(in)(out): A GInputStream to read
+ *                          the header from
+ * @error: (out): An error might be returned here
+ *
+ * Read an header from a input stream.
+ *
+ * Returns: the number of bytes read.
+ */
 gsize
 edf_header_read_from_input_stream(
     EdfHeader      *header,
@@ -1456,11 +1540,17 @@ edf_header_read_from_input_stream(
     if (*error)
         return nread;
 
-    g_assert(nread == edf_header_size(header));
+    g_assert(nread == (gsize)edf_header_get_num_bytes(header));
 
     return nread;
 }
 
+/**
+ * edf_header_get_version:
+ * @header: the #EdfHeader instance whose version you would like to obtain.
+ *
+ * obtains the version of the header.
+ */
 gint
 edf_header_get_version(EdfHeader* header)
 {
@@ -1471,6 +1561,13 @@ edf_header_get_version(EdfHeader* header)
     return priv->version;
 }
 
+/**
+ * edf_header_get_patient:
+ * @header: the #EdfHeader instance whose local patient info you
+ *          would like to obtain.
+ *
+ * obtain the local patient info.
+ */
 const gchar*
 edf_header_get_patient(EdfHeader* header)
 {
@@ -1481,6 +1578,15 @@ edf_header_get_patient(EdfHeader* header)
     return priv->local_patient_identification->str;
 }
 
+/**
+ * edf_header_set_patient:
+ * @header: the header whose patient info to update
+ * @patient: the new patient info
+ *
+ * The length of the patient info is stored as in the file
+ * This makes sure that the string is terminated in such a way
+ * that it will fit the inside the header.
+ */
 gboolean
 edf_header_set_patient(EdfHeader* header, const gchar* patient)
 {
@@ -1496,6 +1602,15 @@ edf_header_set_patient(EdfHeader* header, const gchar* patient)
     return TRUE;
 }
 
+/**
+ * edf_header_get_recording:
+ * @header the input header
+ *
+ * Obtain the recording information as stored in the file
+ * The length of the recording info is stored as in the file
+ * This makes sure that the string is terminated in such a way
+ * that it will fit the inside the header.
+ */
 const gchar*
 edf_header_get_recording(EdfHeader* header)
 {
@@ -1506,6 +1621,13 @@ edf_header_get_recording(EdfHeader* header)
     return priv->local_recording_identification->str;
 }
 
+/**
+ * edf_header_set_recording:
+ * @header: the header to set the recording information
+ * @recording: the new recording information, must be ascii
+ *
+ * Sets the new recording information
+ */
 gboolean
 edf_header_set_recording(EdfHeader* header, const gchar* recording)
 {
@@ -1563,19 +1685,18 @@ edf_header_set_time(EdfHeader* header, GDateTime* time)
 }
 
 /**
- * edf_header_num_bytes:
+ * edf_header_get_num_bytes:
  * @param header :(in)
  *
  * Returns: The number of bytes in the header should be
  *          256 + 256 * number of signals
  */
 gint
-edf_header_num_bytes(EdfHeader* hdr)
+edf_header_get_num_bytes(EdfHeader* hdr)
 {
     g_return_val_if_fail(EDF_IS_HEADER(hdr), -1);
-    uint nbytes;
-    g_object_get(hdr, "num-bytes-header", &nbytes, NULL);
-    return (int)nbytes;
+    unsigned num_signals = edf_header_get_num_signals(hdr);
+    return num_signals * EDF_SIGNAL_HEADER_SIZE + EDF_BASE_HEADER_SIZE;
 }
 
 /**
@@ -1690,6 +1811,20 @@ edf_header_get_num_signals(EdfHeader* header)
 /* ************ utility functions ************** */
 /* these are not coupled with EdfHeader */
 
+/**
+ * edf_compute_header_size
+ * @num_signals :: number of signals in the header
+ *
+ * Computes the header size given the number of signals
+ * in the header.
+ *
+ * The size of the header is 256 bytes for the static part
+ * and bytes 256 for each signal.
+ *
+ * So it should return 256 + 256 * ns;
+ *
+ * Returns : the number of bytes that the header will take.
+ */
 gsize
 edf_compute_header_size(guint num_signals)
 {

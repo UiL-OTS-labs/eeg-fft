@@ -58,7 +58,30 @@ pkg.generate(
     version : gedf_version
 )
 
-#gnome.gtkdoc(
-#    'gedf',
-#    src_dir : ['src', 'include']
-#)
+subdir('docs')
+
+deb_config = configuration_data({
+    'NAME'          : '"' + meson.project_name() + '"',
+    'VERSION'       :  '"' + meson.project_version() + '"',
+    'LICENSE'       : '"' + meson.project_license()[0] + '"',
+
+    'GLIB_NAME'     : '"' + libglib_dep.name() + '"',
+    'GLIB_VERSION'  : '"' + libglib_dep.version() + '"',
+    
+    'GIO_NAME'      : '"' + libgio_dep.name() + '"',
+    'GIO_VERSION'   : '"' + libgio_dep.version() + '"',
+    
+    'GMODULE_NAME'      : '"' + libgmodule_dep.name() + '"',
+    'GMODULE_VERSION'   : '"' + libgmodule_dep.version() + '"'
+})
+
+configure_file(
+    input : 'package.sh.in',
+    output : 'package.sh',
+    configuration : deb_config
+)
+configure_file(
+    input : 'run-ldconfig.sh.in',
+    output : 'run-ldconfig.sh',
+    configuration : deb_config
+)

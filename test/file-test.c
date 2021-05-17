@@ -158,7 +158,7 @@ file_create(void)
     CU_ASSERT_TRUE(EDF_IS_FILE(file));
 
     g_object_get(G_OBJECT(file),
-            "fn", &output_name,
+            "path", &output_name,
             NULL
             );
     CU_ASSERT_STRING_EQUAL(output_name, expected_name);

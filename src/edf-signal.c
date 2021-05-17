@@ -27,7 +27,7 @@ typedef union {
     gint32  i32;
     guint32 u32;
     guint8  array[4];
-}sample_repr;
+} sample_repr;
 
 typedef struct _record {
     guint8* bytes;          /* the bytes representing the signal */
@@ -115,6 +115,15 @@ edf_record_append(EdfRecord* record, gint value)
     record->ns_stored++;
 }
 
+int
+edf_record_get(EdfRecord* record, guint index)
+{
+    sample_repr repr;
+    memcpy(repr.array, &record->bytes[index * record->sizeof_sample], record->sizeof_sample);
+    repr.u16 = GUINT16_FROM_LE(repr.u16);
+    return repr.i16;
+}
+
 typedef struct _EdfSignalPrivate {
     /* recording info.*/
     GString*    label;
@@ -199,6 +208,7 @@ typedef enum {
     PROP_RESERVED,
     PROP_SAMPLE_SIZE,
     PROP_NUM_RECORDS,
+    PROP_SIGNAL,
     N_PROPERTIES
 } EdfSignalProperty;
 
@@ -248,6 +258,7 @@ edf_signal_set_property (
             priv->sample_size = g_value_get_uint(value);
             break;
         case PROP_NUM_RECORDS: // Read only
+        case PROP_SIGNAL: // Read only
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, propid, spec);
     }
@@ -300,6 +311,9 @@ edf_signal_get_property (
             break;
         case PROP_NUM_RECORDS:
             g_value_set_int(value, edf_signal_get_num_records(self));
+            break;
+        case PROP_SIGNAL:
+            g_value_set_boxed(value, edf_signal_get_values(self));
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, propid, spec);
@@ -427,6 +441,14 @@ edf_signal_class_init(EdfSignalClass* klass)
         0,
         G_PARAM_READABLE
         );
+    
+    edf_signal_properties[PROP_SIGNAL] = g_param_spec_boxed(
+        "signal",
+        "Signal",
+        "The signal in the physical dimension as specified by the signal.",
+        G_TYPE_ARRAY,
+        G_PARAM_READABLE
+        );
 
     g_object_class_install_properties(
             object_class, N_PROPERTIES, edf_signal_properties
@@ -478,6 +500,11 @@ signal_append_private(EdfSignal* signal, gint value, GError** error)
     edf_record_append(rec, value);
 }
 
+/**
+ * edf_signal_new:(constructor)
+ *
+ * Create a default new Edf signal.
+ */
 EdfSignal*
 edf_signal_new() {
     EdfSignal* signal;
@@ -485,6 +512,22 @@ edf_signal_new() {
     return signal;
 }
 
+/**
+ * edf_signal_new_full:(constructor)
+ * @label :(transfer none) : A label for the signal
+ * @transducer : (transfer none) : The used transducer fo the signal
+ * @phys_dim : (transfer none) : The unit or physical dimension of the signal.
+ * @physical_min :: the minimum physical value the signal can take.
+ * @physical_max :: the maximum physical value the signal can take.
+ * @digital_min :: the minimum digital value the signal can take.
+ * @digital_max :: the maximum digital value the signal can take.
+ * @prefiltering :(transfer none): the used prefiltering.
+ * @ns :: The number of samples per record.
+ *
+ * Create a new Edf signal with all parameters set to the specified values.
+ *
+ * Returns:(transfer full): A new edf signal.
+ */
 EdfSignal*
 edf_signal_new_full(
         const gchar    *label,
@@ -514,12 +557,25 @@ edf_signal_new_full(
     return new;
 }
 
+/**
+ * edf_signal_destroy:(skip)
+ * @signal :: The signal to destroy
+ *
+ * Decrements the reference of signal and will
+ * free the associated resources when the refcnt
+ * drops to zero.
+ */
 void
 edf_signal_destroy(EdfSignal* signal) {
     g_return_if_fail(EDF_IS_SIGNAL(signal));
     g_object_unref(G_OBJECT(signal));
 }
 
+/**
+ * edf_signal_get_label :
+ *
+ * Returns :(transfer none): the label of the signal.
+ */
 const gchar*
 edf_signal_get_label(EdfSignal* signal)
 {
@@ -529,6 +585,15 @@ edf_signal_get_label(EdfSignal* signal)
     return priv->label->str;
 }
 
+/**
+ * edf_signal_set_label:
+ * @signal: The #EdfSignal whose label to update
+ * @label: ascii string
+ *
+ * The @label will be set to the @signal. The label will be sanitized
+ * that is it will be stripped from whitespace and must fit in the
+ * header as written to file.
+ */
 void
 edf_signal_set_label(EdfSignal* signal, const gchar* label)
 {
@@ -544,6 +609,11 @@ edf_signal_set_label(EdfSignal* signal, const gchar* label)
     g_string_assign(priv->label, temp);
 }
 
+/**
+ * edf_signal_get_transducer:
+ *
+ * Returns :(transfer none): the transducer of the signal.
+ */
 const gchar*
 edf_signal_get_transducer(EdfSignal* signal)
 {
@@ -553,6 +623,15 @@ edf_signal_get_transducer(EdfSignal* signal)
     return priv->transducer_type->str;
 }
 
+/**
+ * edf_signal_set_transducer:
+ * @signal: The #EdfSignal whose transducer to update
+ * @transducer: ascii string
+ *
+ * The @transducer will be set to the @signal. The label will be sanitized
+ * that is it will be stripped from whitespace and must fit in the
+ * header as written to file.
+ */
 void
 edf_signal_set_transducer(EdfSignal* signal, const gchar* transducer)
 {
@@ -568,6 +647,11 @@ edf_signal_set_transducer(EdfSignal* signal, const gchar* transducer)
     g_string_assign (priv->transducer_type, temp);
 }
 
+/**
+ * edf_signal_get_physical_dimension:
+ *
+ * Returns :(transfer none): the physical dimension (unit) of the signal.
+ */
 const gchar*
 edf_signal_get_physical_dimension(EdfSignal* signal)
 {
@@ -577,6 +661,15 @@ edf_signal_get_physical_dimension(EdfSignal* signal)
     return priv->physical_dimension->str;
 }
 
+/**
+ * edf_signal_set_physical_dimension:
+ * @signal: The #EdfSignal whose transducer to update
+ * @dimension: ascii string eg uV for microVolt
+ *
+ * The @dimension will be set to the @signal. The label will be sanitized
+ * that is it will be stripped from whitespace and must fit in the
+ * header as written to file.
+ */
 void
 edf_signal_set_physical_dimension(EdfSignal* signal, const gchar* dimension)
 {
@@ -591,6 +684,15 @@ edf_signal_set_physical_dimension(EdfSignal* signal, const gchar* dimension)
     g_string_printf (priv->physical_dimension, "%s", temp);
 }
 
+/**
+ * edf_signal_get_physical_min:
+ * @signal:: the input signal
+ *
+ * obtain the physical minimum of the signal. This is relevant to compute
+ * the final signal value for a digital input value.
+ *
+ * Returns: the minimum a value can have in its physical dimension
+ */
 gdouble
 edf_signal_get_physical_min(EdfSignal* signal)
 {
@@ -600,6 +702,13 @@ edf_signal_get_physical_min(EdfSignal* signal)
     return priv->physical_min;
 }
 
+/**
+ * edf_signal_set_physical_min:
+ * @signal: the input signal
+ * @min: The minimum this value should be less than the max
+ *
+ * set the physical minimum of the signal
+ */
 void
 edf_signal_set_physical_min(EdfSignal* signal, gdouble min)
 {
@@ -609,6 +718,15 @@ edf_signal_set_physical_min(EdfSignal* signal, gdouble min)
     priv->physical_min = min;
 }
 
+/**
+ * edf_signal_get_physical_max:
+ * @signal:: the input signal
+ *
+ * obtain the physical maximum of the signal. This is relevant to compute
+ * the final signal value for a digital input value.
+ *
+ * Returns: the maximum a value can have in its physical dimension
+ */
 gdouble
 edf_signal_get_physical_max(EdfSignal* signal)
 {
@@ -618,6 +736,13 @@ edf_signal_get_physical_max(EdfSignal* signal)
     return priv->physical_max;
 }
 
+/**
+ * edf_signal_set_physical_max:
+ * @signal: the input signal
+ * @max: The maximum this value should be greater than the max
+ *
+ * set the physical maximum of the signal
+ */
 void
 edf_signal_set_physical_max(EdfSignal* signal, gdouble max)
 {
@@ -627,6 +752,15 @@ edf_signal_set_physical_max(EdfSignal* signal, gdouble max)
     priv->physical_max = max;
 }
 
+/**
+ * edf_signal_get_digital_min:
+ * @signal:: the input signal
+ *
+ * obtain the digital minimum of the signal. This is relevant to compute
+ * the final signal value for a digital input value.
+ *
+ * Returns: the minimum a value can have in its digital dimension
+ */
 gint
 edf_signal_get_digital_min(EdfSignal* signal)
 {
@@ -636,6 +770,14 @@ edf_signal_get_digital_min(EdfSignal* signal)
     return priv->digital_min;
 }
 
+/**
+ * edf_signal_set_digital_min:
+ * @signal: the input signal
+ * @min: The minimum this value should be less than the max
+ *
+ * set the digital minimum of the signal which is typically the lowest
+ * value obtained from an ADC.
+ */
 void
 edf_signal_set_digital_min(EdfSignal* signal, gint min)
 {
@@ -645,6 +787,15 @@ edf_signal_set_digital_min(EdfSignal* signal, gint min)
     priv->digital_min = min;
 }
 
+/**
+ * edf_signal_get_digital_max:
+ * @signal:: the input signal
+ *
+ * obtain the digital maximum of the signal. This is relevant to compute
+ * the final signal value for a digital input value.
+ *
+ * Returns: the maximum a value can have in its digital dimension
+ */
 gint
 edf_signal_get_digital_max(EdfSignal* signal)
 {
@@ -654,6 +805,14 @@ edf_signal_get_digital_max(EdfSignal* signal)
     return priv->digital_max;
 }
 
+/**
+ * edf_signal_set_digital_max:
+ * @signal: the input signal
+ * @min: The maximum this value should be greater than the min
+ *
+ * set the digital maximum of the signal which is typically the highest
+ * value obtained from an ADC.
+ */
 void
 edf_signal_set_digital_max(EdfSignal* signal, gint max)
 {
@@ -663,6 +822,11 @@ edf_signal_set_digital_max(EdfSignal* signal, gint max)
     priv->digital_max = max;
 }
 
+/**
+ * edf_signal_get_prefiltering :
+ *
+ * Returns :(transfer none): the prefiltering of the signal.
+ */
 const gchar*
 edf_signal_get_prefiltering(EdfSignal* signal)
 {
@@ -672,6 +836,15 @@ edf_signal_get_prefiltering(EdfSignal* signal)
     return priv->prefiltering->str;
 }
 
+/**
+ * edf_signal_set_prefiltering:
+ * @signal: The #EdfSignal whose prefilter to update
+ * @prefilter: ascii string eg HP:20 for an highpass 20 Hz filter
+ *
+ * The @prefilter will be set to the @signal. The label will be sanitized
+ * that is it will be stripped from whitespace and must fit in the
+ * header as written to file.
+ */
 void
 edf_signal_set_prefiltering(EdfSignal* signal, const gchar* prefiltering)
 {
@@ -687,6 +860,14 @@ edf_signal_set_prefiltering(EdfSignal* signal, const gchar* prefiltering)
     g_string_assign (priv->prefiltering, temp);
 }
 
+/**
+ * edf_signal_append:
+ * @signal:in: the signal to append a value to.
+ * @value:in: the value to append the value is valid for digital_minimum < value < digital_maximum
+ * @error:out: If the value is out of bounds or there isn't memory enough an error can be returned here.
+ *
+ * Append a digital value to the signal.
+ */
 void
 edf_signal_append_digital(EdfSignal* signal, gint value, GError** error)
 {
@@ -708,6 +889,16 @@ edf_signal_append_digital(EdfSignal* signal, gint value, GError** error)
     signal_append_private(signal, value, error);
 }
 
+/**
+ * edf_signal_get_num_records:
+ * @signal:
+ *
+ * This field doesn't end in the header per signal, but for all signals
+ * it can be used to check if all signals of an #EdfFile contain a equal
+ * number of records.
+ *
+ * Returns: the number of records contained in this #EdfSignal
+ */
 guint
 edf_signal_get_num_records(EdfSignal* signal)
 {
@@ -717,6 +908,14 @@ edf_signal_get_num_records(EdfSignal* signal)
     return priv->records->len;
 }
 
+/**
+ * edf_signal_get_reserved:
+ * @signal:(in): the signal whose reserved info you would like to know
+ *
+ * Obtain the reserved information of a signal
+ *
+ * Returns: a pointer to the string of the signal.
+ */
 const gchar*
 edf_signal_get_reserved(EdfSignal* signal)
 {
@@ -725,6 +924,15 @@ edf_signal_get_reserved(EdfSignal* signal)
     return priv->reserved->str;
 }
 
+/**
+ * edf_signal_set_reserved:
+ * @signal: The #EdfSignal whose transducer to update
+ * @reserved: reserved information
+ *
+ * The @dimension will be set to the @signal. The label will be sanitized
+ * that is it will be stripped from whitespace and must fit in the
+ * header as written to file.
+ */
 void
 edf_signal_set_reserved(EdfSignal* signal, const gchar* reserved)
 {
@@ -740,6 +948,11 @@ edf_signal_set_reserved(EdfSignal* signal, const gchar* reserved)
     g_string_assign(priv->reserved, temp);
 }
 
+/**
+ * edf_signal_get_num_samples_per_record:
+ *
+ * Returns: the number of samples in each record
+ */
 gint
 edf_signal_get_num_samples_per_record(EdfSignal* signal)
 {
@@ -748,6 +961,13 @@ edf_signal_get_num_samples_per_record(EdfSignal* signal)
     return priv->num_samples_per_record;
 }
 
+/**
+ * edf_signal_set_num_samples_per_record:
+ * @signal: the input signal
+ * @num_samples: The number of samples in each record
+ *
+ * This sets the number of samples contained in the signal in each record
+ */
 void
 edf_signal_set_num_samples_per_record(EdfSignal* signal, guint num_samples)
 {
@@ -756,6 +976,48 @@ edf_signal_set_num_samples_per_record(EdfSignal* signal, guint num_samples)
     priv->num_samples_per_record = num_samples;
 }
 
+/**
+ * edf_signal_get_values
+ * @signal: the signal whos value you would like to read.
+ *
+ * Returns:(transfer full) (element-type gdouble): A list of doubles that is represents
+ * the signal that is recorded.
+ */
+GArray*
+edf_signal_get_values(EdfSignal* signal)
+{
+    g_return_val_if_fail(EDF_IS_SIGNAL(signal), NULL);
+
+    EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
+
+    size_t size = edf_signal_get_num_records(signal) *
+                  edf_signal_get_num_samples_per_record(signal);
+
+    GArray* ret = g_array_sized_new(FALSE, FALSE, sizeof(gdouble), size);
+    g_return_val_if_fail(ret, NULL);
+
+    int dig_min = edf_signal_get_digital_min(signal);
+    int dig_max = edf_signal_get_digital_min(signal);
+    double phys_min = edf_signal_get_physical_min(signal);
+    double phys_max = edf_signal_get_physical_max(signal);
+    double phys_span = phys_max - phys_min;
+    int dig_span = dig_max - dig_min;
+    double step = phys_span / dig_span;
+
+    for (gsize nrec = 0; nrec < priv->records->len; nrec++) {
+        EdfRecord* record = g_ptr_array_index(priv->records, nrec);
+        for (gsize i = 0; i < (unsigned) priv->num_samples_per_record; i++) {
+            int digital_val = edf_record_get(record, i);
+            gdouble val = phys_min + step * (digital_val - dig_min);
+            g_array_append_val(ret, val);
+        }
+    }
+    return ret;
+}
+
+/**
+ * edf_signal_write_record_to_ostream:(skip)
+ */
 void
 edf_signal_write_record_to_ostream(
         EdfSignal        *signal,
@@ -787,6 +1049,9 @@ edf_signal_write_record_to_ostream(
     }
 }
 
+/**
+ * edf_signal_read_record_from_istream:(skip)
+ */
 gsize
 edf_signal_read_record_from_istream(
     EdfSignal     *signal,
