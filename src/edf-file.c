@@ -525,10 +525,10 @@ edf_file_set_signals(EdfFile* file, GPtrArray* signals) {
  * edf_file_get_signals:
  * @file:: The from which to obtain the signals.
  *
- * Returns:(transfer none)(element-type EdfSignal)
+ * Returns:(transfer none)(element-type EdfSignal*)
  */
 GPtrArray*
-edf_file_get_sigals(EdfFile* file)
+edf_file_get_signals(EdfFile* file)
 {
     g_return_val_if_fail(EDF_IS_FILE(file), NULL);
     EdfFilePrivate* priv =  edf_file_get_instance_private(file);

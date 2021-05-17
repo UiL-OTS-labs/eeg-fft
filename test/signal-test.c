@@ -1,16 +1,13 @@
 
-#include <CUnit/CUnit.h>
+#include <glib.h>
+#include <locale.h>
 #include <gedf.h>
-#include "edf-signal.h"
-#include "test-macros.h"
-
-static const char* SUITE_NAME = "EdfSignalSuite";
 
 static void
 signal_create(void)
 {
     EdfSignal* signal = edf_signal_new();
-    CU_ASSERT_PTR_NOT_NULL(signal);
+    g_assert_nonnull(signal);
     edf_signal_destroy(signal);
 }
 
@@ -57,15 +54,15 @@ signal_create_full(void)
     phys_dim_ret = edf_signal_get_physical_dimension(signal);
     prefilter_ret = edf_signal_get_prefiltering(signal);
 
-    CU_ASSERT_STRING_EQUAL(label, label_ret);
-    CU_ASSERT_STRING_EQUAL(transducer, transducer_ret);
-    CU_ASSERT_STRING_EQUAL(phys_dim, phys_dim_ret);
-    CU_ASSERT_EQUAL(phys_min, phys_min_ret);
-    CU_ASSERT_EQUAL(phys_max, phys_max_ret);
-    CU_ASSERT_EQUAL(dig_min, dig_min_ret);
-    CU_ASSERT_EQUAL(dig_max, dig_max_ret);
-    CU_ASSERT_STRING_EQUAL(prefilter, prefilter_ret);
-    CU_ASSERT_EQUAL(ns, ns_ret);
+    g_assert_cmpstr(label, ==, label_ret);
+    g_assert_cmpstr(transducer, ==, transducer_ret);
+    g_assert_cmpstr(phys_dim, ==, phys_dim_ret);
+    g_assert_cmpfloat(phys_min, ==, phys_min_ret);
+    g_assert_cmpfloat(phys_max, ==, phys_max_ret);
+    g_assert_cmpint(dig_min, ==, dig_min_ret);
+    g_assert_cmpint(dig_max, ==, dig_max_ret);
+    g_assert_cmpstr(prefilter, ==, prefilter_ret);
+    g_assert_cmpuint(ns, ==, ns_ret);
 
     edf_signal_destroy(signal);
 }
@@ -99,24 +96,24 @@ signal_append_digital(void)
             ns
             );
     // An empty signal should hold no records.
-    CU_ASSERT_EQUAL(edf_signal_get_num_records(signal), 0);
+    g_assert_cmpuint(edf_signal_get_num_records(signal), ==, 0);
 
     for (gint s = 0; s < ns_insert; s++) {
         edf_signal_append_digital(signal, s % 1024, &error);
         if (error != NULL)
             break;
     }
-    CU_ASSERT_PTR_NULL(error);
+    g_assert_no_error(error);
     if (error) {
         g_printerr("%s: Unexpected error occurred: %s", __func__, error->message);
         g_clear_error(&error);
     }
 
-    CU_ASSERT_EQUAL(edf_signal_get_num_records(signal), num_records_expected);
+    g_assert_cmpuint(edf_signal_get_num_records(signal), ==, num_records_expected);
 
     // the previous record should be full, thus this should force another record
     edf_signal_append_digital(signal, 0, &error);
-    CU_ASSERT_EQUAL(edf_signal_get_num_records(signal), num_records_expected + 1);
+    g_assert_cmpuint(edf_signal_get_num_records(signal), ==, num_records_expected + 1);
 
     edf_signal_destroy(signal);
 }
@@ -149,34 +146,29 @@ signal_append_digital_range_error(void)
             );
     
     edf_signal_append_digital(signal, 1024, &error);
-    CU_ASSERT_PTR_NOT_NULL(error);
-    if (error) {
-        CU_ASSERT_EQUAL(error->domain, EDF_SIGNAL_ERROR);
-        CU_ASSERT_EQUAL(error->code, EDF_SIGNAL_ERROR_OUT_OF_RANGE);
+    g_assert_error(error, EDF_SIGNAL_ERROR, EDF_SIGNAL_ERROR_OUT_OF_RANGE);
+    if (error)
         g_clear_error(&error);
-    }
-
 
     edf_signal_append_digital(signal, -1, &error);
-    CU_ASSERT_PTR_NOT_NULL(error);
-    if (error) {
-        CU_ASSERT_EQUAL(error->domain, EDF_SIGNAL_ERROR);
-        CU_ASSERT_EQUAL(error->code, EDF_SIGNAL_ERROR_OUT_OF_RANGE);
+    g_assert_error(error, EDF_SIGNAL_ERROR, EDF_SIGNAL_ERROR_OUT_OF_RANGE);
+    if (error)
         g_clear_error(&error);
-    }
 
     g_object_unref(signal);
 }
 
 
-int add_signal_suite()
+int main(int argc, char** argv)
 {
-    UNIT_SUITE_CREATE(NULL, NULL);
+    setlocale(LC_ALL, "");
+    g_test_init(&argc, &argv, NULL);
 
-    UNIT_TEST_CREATE(signal_create);
-    UNIT_TEST_CREATE(signal_create_full);
-    UNIT_TEST_CREATE(signal_append_digital);
-    UNIT_TEST_CREATE(signal_append_digital_range_error);
+    g_test_add_func("/EdfSignal/create", signal_create);
+    g_test_add_func("/EdfSignal/create-full",signal_create_full);
+    g_test_add_func("/EdfSignal/append_digital",signal_append_digital);
+    g_test_add_func("/EdfSignal/append_digital_range_error",
+                    signal_append_digital_range_error);
 
-    return 0;
+    return g_test_run();
 }

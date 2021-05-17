@@ -118,11 +118,11 @@ edf_signal_set_num_samples_per_record(EdfSignal* signal, guint num_samples);
 G_MODULE_EXPORT const char*
 edf_signal_get_reserved(EdfSignal* signal);
 
- G_MODULE_EXPORT void
- edf_signal_set_reserved(EdfSignal* signal, const gchar* reserved);
+G_MODULE_EXPORT void
+edf_signal_set_reserved(EdfSignal* signal, const gchar* reserved);
 
- G_MODULE_EXPORT guint
- edf_signal_get_num_records(EdfSignal* signal);
+G_MODULE_EXPORT guint
+edf_signal_get_num_records(EdfSignal* signal);
 
 G_MODULE_EXPORT void
 edf_signal_append_digital(EdfSignal* signal, gint value, GError** error);

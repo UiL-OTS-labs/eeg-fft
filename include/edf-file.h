@@ -19,8 +19,8 @@ struct _EdfFileClass {
     GObjectClass parent_class;
 };
 
- G_MODULE_EXPORT EdfFile*
- edf_file_new();
+G_MODULE_EXPORT EdfFile*
+edf_file_new();
 
 G_MODULE_EXPORT EdfFile*
 edf_file_new_for_path(const char* path);

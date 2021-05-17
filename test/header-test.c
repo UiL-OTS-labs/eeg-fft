@@ -1,9 +1,7 @@
 
-#include <CUnit/CUnit.h>
+#include <locale.h>
+#include <glib.h>
 #include <gedf.h>
-#include "test-macros.h"
-
-static const char* SUITE_NAME = "EdfHeaderSuite";
 
 /* taken from https://www.biosemi.com/faq/file_format.htm */
 static size_t
@@ -16,7 +14,7 @@ static void
 header_create(void)
 {
     EdfHeader* header = edf_header_new();
-    CU_ASSERT_PTR_NOT_NULL(header);
+    g_assert_nonnull(header);
     edf_header_destroy(header);
 }
 
@@ -26,27 +24,18 @@ header_size(void)
     EdfHeader* hdr = edf_header_new();
     guint hdrsz;
     g_object_get(hdr, "num-bytes-header", &hdrsz, NULL);
-    CU_ASSERT_EQUAL(hdrsz, bdf_header_size_validator(0));
+    g_assert_cmpuint(hdrsz, ==, bdf_header_size_validator(0));
     
     edf_header_destroy(hdr);
 }
 
-static void
-header_num_signals(void)
+int main(int argc, char** argv)
 {
-    EdfHeader* hdr = edf_header_new();
-    //gboolean succes = edf_header_set_num_signals(hdr, 16);
-    CU_ASSERT_EQUAL(0, 1); // to remember us that this needs to be implemented or removed
-    edf_header_destroy(hdr);
-}
+    setlocale(LC_ALL, "");
+    g_test_init(&argc, &argv, NULL);
 
-int add_header_suite()
-{
-    UNIT_SUITE_CREATE(NULL, NULL);
+    g_test_add_func("/EdfHeader/create", header_create);
+    g_test_add_func("/EdfHeader/size",header_size);
 
-    UNIT_TEST_CREATE(header_create);
-    UNIT_TEST_CREATE(header_size);
-    UNIT_TEST_CREATE(header_num_signals);
-
-    return 0;
+    return g_test_run();
 }

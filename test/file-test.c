@@ -1,14 +1,12 @@
 
-#include <CUnit/CUnit.h>
 #include <gedf.h>
-#include <stdarg.h>
-#include "edf-file.h"
-#include "edf-signal.h"
-#include "test-macros.h"
+#include <locale.h>
+#include <glib.h>
 #include <time.h>
+#include <math.h>
 
 /* ******** global constants ********* */
-static const char* SUITE_NAME = "EdfFileSuite";
+//static const char* SUITE_NAME = "EdfFileSuite";
 
 // A default name to use for an edf file
 const gchar* default_name = "hello-world.edf";
@@ -145,7 +143,7 @@ fill_signal(
 /* ******* tests ******** */
 
 static void
-file_create(void)
+file_create()
 {
     EdfFile* file = NULL;
     file = edf_file_new_for_path(default_name);
@@ -154,14 +152,14 @@ file_create(void)
     
     dirname = g_get_current_dir();
     expected_name = g_build_filename(dirname, default_name, NULL);
-    CU_ASSERT_PTR_NOT_NULL(file);
-    CU_ASSERT_TRUE(EDF_IS_FILE(file));
+    g_assert_nonnull(file);
+    g_assert_true(EDF_IS_FILE(file));
 
     g_object_get(G_OBJECT(file),
             "path", &output_name,
             NULL
             );
-    CU_ASSERT_STRING_EQUAL(output_name, expected_name);
+    g_assert_cmpstr(output_name, ==, expected_name);
 
     g_free(output_name);
     g_free(dirname);
@@ -171,7 +169,7 @@ file_create(void)
 }
 
 static void
-file_name(void)
+file_name()
 {
     EdfFile* file = NULL;
     file = edf_file_new_for_path(default_name);
@@ -182,7 +180,7 @@ file_name(void)
     edf_file_set_path(file, build_name);
     name_ret = edf_file_get_path(file);
 
-    CU_ASSERT_STRING_EQUAL(name_ret, build_name);
+    g_assert_cmpstr(name_ret, ==, build_name);
 
     g_free(name_ret);
     g_free(build_name);
@@ -191,7 +189,7 @@ file_name(void)
 }
 
 static void
-file_open_writing(void)
+file_open_writing()
 {
     EdfFile* file = NULL;
     GError* error = NULL;
@@ -200,7 +198,7 @@ file_open_writing(void)
     file  = edf_file_new_for_path(tempfile);
 
     edf_file_create(file, &error);
-    CU_ASSERT_PTR_NULL(error);
+    g_assert_no_error(error);
     if(error) {
         g_printerr("Unable to open '%s':\n\t- %s\n", tempfile, error->message);
         g_error_free(error);
@@ -208,12 +206,12 @@ file_open_writing(void)
     }
     
     edf_file_create(file, &error);
-    CU_ASSERT_PTR_NOT_NULL(error);
+    g_assert_error(error, g_io_error_quark(), G_IO_ERROR_EXISTS);
     if(error) {
         g_error_free(error);
         error = NULL;
         edf_file_replace(file, &error);
-        CU_ASSERT_PTR_NULL(error);
+        g_assert_no_error(error);
         if (error)
             g_error_free(error);
     }
@@ -224,7 +222,7 @@ file_open_writing(void)
 }
 
 static void
-file_write_with_elaborate_header_and_signals(void)
+file_write_with_elaborate_header_and_signals()
 {
     EdfFile* file = NULL;
     EdfSignal* signal1 = NULL, *signal2 = NULL;
@@ -313,7 +311,7 @@ file_write_with_elaborate_header_and_signals(void)
     }
     
     edf_file_replace(file, &error);
-    CU_ASSERT_PTR_NULL(error);
+    g_assert_no_error(error);
     if (error) {
         g_printerr("%s oops: %s", __func__, error->message);
         goto fail;
@@ -330,7 +328,7 @@ fail:
 }
 
 static void
-file_open_reading(void)
+file_open_reading()
 {
     EdfFile *file = NULL;
     GError  *error = NULL;
@@ -354,7 +352,7 @@ file_open_reading(void)
     file  = edf_file_new_for_path(tempfile);
 
     edf_file_read(file, &error);
-    CU_ASSERT_PTR_NULL(error);
+    g_assert_no_error(error);
     if (error) {
         g_printerr("%s:%d oops: %s", __func__, __LINE__, error->message);
         goto fail;
@@ -374,18 +372,19 @@ file_open_reading(void)
         "num-signals", &num_signals,
         NULL
     );
-    CU_ASSERT_EQUAL(version, hdr_info.version);
-    CU_ASSERT_EQUAL(expected_header_size, hdr_info.expected_header_size);
-    CU_ASSERT_EQUAL(num_records, hdr_info.num_records);
-    CU_ASSERT_EQUAL(dur_record, hdr_info.dur_record);
-    CU_ASSERT_EQUAL(num_signals, hdr_info.num_signals);
-    CU_ASSERT_STRING_EQUAL(loc_patient, hdr_info.loc_patient);
-    CU_ASSERT_STRING_EQUAL(loc_recording, hdr_info.loc_recording);
-    CU_ASSERT_STRING_EQUAL(reserved, hdr_info.reserved);
+    g_assert_cmpint(version, ==, hdr_info.version);
+    g_assert_cmpuint(expected_header_size, ==, hdr_info.expected_header_size);
+    g_assert_cmpint(num_records, ==, hdr_info.num_records);
+    g_assert_cmpfloat(dur_record, ==, hdr_info.dur_record);
+    g_assert_cmpuint(num_signals, ==, hdr_info.num_signals);
+    g_assert_cmpstr(loc_patient, ==, hdr_info.loc_patient);
+    g_assert_cmpstr(loc_recording, ==, hdr_info.loc_recording);
+    g_assert_cmpstr(reserved, ==, hdr_info.reserved);
+
+    // GPtrArray* signals = edf_file_get_signals(file);
 
 fail:
     g_object_unref(file);
-    g_object_unref(hdr);
     g_free(tempfile);
     g_free(loc_patient);
     g_free(loc_recording);
@@ -394,16 +393,22 @@ fail:
         g_date_time_unref(date);
 }
 
-
-
-int add_file_suite()
+int main(int argc, char** argv)
 {
-    UNIT_SUITE_CREATE(file_test_init, file_test_finalize);
+    setlocale(LC_ALL, "");
 
-    UNIT_TEST_CREATE(file_create);
-    UNIT_TEST_CREATE(file_name);
-    UNIT_TEST_CREATE(file_open_writing);
-    UNIT_TEST_CREATE(file_write_with_elaborate_header_and_signals);
-    UNIT_TEST_CREATE(file_open_reading);
-    return 0;
+    g_test_init(&argc, &argv, NULL);
+
+    g_test_add_func("/EdfFile/create", file_create);
+    g_test_add_func("/EdfFile/name", file_name);
+    g_test_add_func("/EdfFile/writing", file_open_writing);
+    g_test_add_func(
+        "/EdfFile/file_write_with_elaborate_header_and_signals",
+        file_write_with_elaborate_header_and_signals
+    );
+    g_test_add_func("/EdfFile/open_reading", file_open_reading);
+    file_test_init();
+    int ret = g_test_run();
+    file_test_finalize();
+    return ret;
 }
