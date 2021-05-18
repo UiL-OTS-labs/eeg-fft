@@ -393,6 +393,35 @@ fail:
         g_date_time_unref(date);
 }
 
+void file_set_signals(void)
+{
+    EdfFile* file;
+    EdfHeader* header;
+    GPtrArray* signals, *sig_file, *sig_header;
+
+    file = edf_file_new();
+    signals = g_ptr_array_new();
+    g_object_get(
+        file,
+        "header", &header,
+        NULL
+    );
+
+    for (unsigned i = 0; i < 3; i++) {
+        EdfSignal* sig = edf_signal_new();
+        g_ptr_array_add (signals, sig);
+    }
+
+    edf_file_set_signals(file, signals);
+
+    sig_file = edf_file_get_signals(file);
+    sig_header = edf_header_get_signals(header);
+
+    g_assert_true(sig_header == sig_file);
+
+    edf_file_destroy(file);
+}
+
 int main(int argc, char** argv)
 {
     setlocale(LC_ALL, "");
@@ -407,6 +436,7 @@ int main(int argc, char** argv)
         file_write_with_elaborate_header_and_signals
     );
     g_test_add_func("/EdfFile/open_reading", file_open_reading);
+    g_test_add_func("/EdfFile/set_signals", file_set_signals);
     file_test_init();
     int ret = g_test_run();
     file_test_finalize();

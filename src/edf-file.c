@@ -217,7 +217,6 @@ edf_file_class_init(EdfFileClass* klass)
      *
      * Every file contains a header it changes on basis of the
      * number and type of signals that are embedded in the file.
-     *
      */
     edf_file_properties [PROP_HEADER] = g_param_spec_object(
             "header",
@@ -231,7 +230,7 @@ edf_file_class_init(EdfFileClass* klass)
      * EdfFile:signals:
      *
      * Every file contains (hopefully) some signals that contain
-     * the actual data of one transcucer. The signals document
+     * the actual data of one transducer. The signals document
      * what type of data is gathered.
      */
     edf_file_properties [PROP_SIGNALS] = g_param_spec_boxed(
@@ -509,14 +508,15 @@ edf_file_add_signal(EdfFile* file, EdfSignal* signal)
 void
 edf_file_set_signals(EdfFile* file, GPtrArray* signals) {
     g_return_if_fail(EDF_IS_FILE(file));
-    g_return_if_fail(signals);
+    g_return_if_fail(signals != NULL);
 
-    g_object_ref(signals);
+    g_ptr_array_ref(signals);
 
     EdfFilePrivate* priv = edf_file_get_instance_private(file);
-    if (priv->signals) {
-        g_clear_object(&priv->signals);
-    }
+    if (priv->signals)
+        g_ptr_array_unref(priv->signals);
+
+    edf_header_set_signals(priv->header, signals);
 
     priv->signals = signals;    
 }

@@ -127,6 +127,9 @@ edf_header_set_record_duration(
 G_MODULE_EXPORT guint
 edf_header_get_num_signals(EdfHeader* header);
 
+G_MODULE_EXPORT GPtrArray*
+edf_header_get_signals(EdfHeader* header);
+
 
 /****** utility functions not directly related to EdfHeader instances ******* */
 

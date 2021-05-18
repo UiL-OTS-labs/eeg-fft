@@ -525,6 +525,7 @@ read_phys_dim (EdfHeader* hdr, GInputStream *stream, GError **error)
     }
     return nread_tot;
 }
+
 static gsize
 read_phys_min (EdfHeader* hdr, GInputStream *stream, GError **error)
 {
@@ -574,6 +575,7 @@ read_phys_max (EdfHeader* hdr, GInputStream *stream, GError **error)
     }
     return nread_tot;
 }
+
 static gsize
 read_dig_min (EdfHeader* hdr, GInputStream *stream, GError **error)
 {
@@ -1806,6 +1808,27 @@ edf_header_get_num_signals(EdfHeader* header)
     EdfHeaderPrivate* priv = edf_header_get_instance_private(header);
 
     return priv->signals->len;
+}
+
+/**
+ * edf_header_get_signals:
+ * @header: the header whose signals to obtain
+ *
+ * Obtain the signals. You probably want the signals
+ * from the file, they are the same, but this
+ * function is mainly added for internal testing
+ * purposes.
+ *
+ * Returns: (transfer none)(element-type EdfSignal*):
+ * an pointer to the GPtrArray containing the signals.
+ */
+GPtrArray*
+edf_header_get_signals(EdfHeader* header) {
+    g_return_val_if_fail(EDF_IS_HEADER(header), NULL);
+
+    EdfHeaderPrivate* priv = edf_header_get_instance_private(header);
+
+    return priv->signals;
 }
 
 /* ************ utility functions ************** */
