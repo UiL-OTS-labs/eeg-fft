@@ -159,16 +159,11 @@ signal_append_digital_range_error(void)
 }
 
 
-int main(int argc, char** argv)
+void add_signal_suite()
 {
-    setlocale(LC_ALL, "");
-    g_test_init(&argc, &argv, NULL);
-
     g_test_add_func("/EdfSignal/create", signal_create);
     g_test_add_func("/EdfSignal/create-full",signal_create_full);
     g_test_add_func("/EdfSignal/append_digital",signal_append_digital);
     g_test_add_func("/EdfSignal/append_digital_range_error",
                     signal_append_digital_range_error);
-
-    return g_test_run();
 }

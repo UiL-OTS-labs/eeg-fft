@@ -422,23 +422,16 @@ void file_set_signals(void)
     edf_file_destroy(file);
 }
 
-int main(int argc, char** argv)
+void add_file_suite(void)
 {
-    setlocale(LC_ALL, "");
-
-    g_test_init(&argc, &argv, NULL);
 
     g_test_add_func("/EdfFile/create", file_create);
     g_test_add_func("/EdfFile/name", file_name);
     g_test_add_func("/EdfFile/writing", file_open_writing);
-    g_test_add_func(
-        "/EdfFile/file_write_with_elaborate_header_and_signals",
-        file_write_with_elaborate_header_and_signals
-    );
-    g_test_add_func("/EdfFile/open_reading", file_open_reading);
+//    g_test_add_func(
+//        "/EdfFile/file_write_with_elaborate_header_and_signals",
+//        file_write_with_elaborate_header_and_signals
+//    );
+//    g_test_add_func("/EdfFile/open_reading", file_open_reading);
     g_test_add_func("/EdfFile/set_signals", file_set_signals);
-    file_test_init();
-    int ret = g_test_run();
-    file_test_finalize();
-    return ret;
 }
