@@ -7,7 +7,7 @@ gedf_sources = files (
 
 extra_c_args = []
 build_type = get_option('buildtype')
-if build_type != 'debug'
+if build_type != 'debug' and build_type != 'plain'
     extra_c_args += ['-DG_DISABLE_ASSERT']
 else
     extra_c_args += []

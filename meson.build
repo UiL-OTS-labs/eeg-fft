@@ -61,18 +61,18 @@ pkg.generate(
 subdir('docs')
 
 deb_config = configuration_data({
-    'NAME'          : '"' + meson.project_name() + '"',
-    'VERSION'       :  '"' + meson.project_version() + '"',
-    'LICENSE'       : '"' + meson.project_license()[0] + '"',
+    'NAME'              : '"' + meson.project_name()        + '"',
+    'VERSION'           : '"' + meson.project_version()     + '"',
+    'LICENSE'           : '"' + meson.project_license()[0]  + '"',
 
-    'GLIB_NAME'     : '"' + libglib_dep.name() + '"',
-    'GLIB_VERSION'  : '"' + libglib_dep.version() + '"',
+    'GLIB_NAME'         : '"' + libglib_dep.name()          + '"',
+    'GLIB_VERSION'      : '"' + libglib_dep.version()       + '"',
     
-    'GIO_NAME'      : '"' + libgio_dep.name() + '"',
-    'GIO_VERSION'   : '"' + libgio_dep.version() + '"',
+    'GIO_NAME'          : '"' + libgio_dep.name()           + '"',
+    'GIO_VERSION'       : '"' + libgio_dep.version()        + '"',
     
-    'GMODULE_NAME'      : '"' + libgmodule_dep.name() + '"',
-    'GMODULE_VERSION'   : '"' + libgmodule_dep.version() + '"'
+    'GMODULE_NAME'      : '"' + libgmodule_dep.name()       + '"',
+    'GMODULE_VERSION'   : '"' + libgmodule_dep.version()    + '"'
 })
 
 configure_file(
