@@ -416,6 +416,12 @@ end:
     return ret;
 }
 
+/**
+ * Reads the file previously written by
+ * file_write_with_elaborate_header_and_signals
+ * comparsison for equality with the one
+ * obtained from the fixture.
+ */
 static void
 file_open_reading(FileFixture* fixture, gconstpointer unused)
 {

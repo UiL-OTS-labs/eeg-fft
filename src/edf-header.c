@@ -11,8 +11,7 @@
  * EdfHeader:
  *
  * The Edfheader is a instance that holds some of the
- * meta data about an (.edf) European Dataformat File.
- *
+ * meta data about an (.edf) European Data Format file.
  */
 
 /* **** error handing **** */
@@ -48,7 +47,6 @@ set_patient_identification(EdfHeader* hdr, const gchar* info)
     g_string_assign (priv->local_patient_identification, stripped);
     g_free (copy);
 }
-
 
 static void
 set_recording_identification(EdfHeader* hdr, const gchar* info)
