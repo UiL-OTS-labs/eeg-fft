@@ -136,7 +136,7 @@ set_num_signals(EdfHeader* hdr, gint num_signals)
     }
 }
 
-/* ********* functions to read an header ********** */
+/* ********* functions to read/write an header ********** */
 
 static gsize
 read_version (EdfHeader* hdr, GInputStream* stream, GError** error)
@@ -159,6 +159,29 @@ read_version (EdfHeader* hdr, GInputStream* stream, GError** error)
 
     priv->version = val;
     return nread;
+}
+
+static gsize
+write_version(EdfHeader* hdr, GOutputStream* stream, GError** error)
+{
+    gsize sz;
+    char temp[EDF_VERSION_SZ + 1];
+    char buffer[EDF_VERSION_SZ];
+    EdfHeaderPrivate* priv = edf_header_get_instance_private(hdr);
+
+    // Write version
+    memset (buffer, ' ', EDF_VERSION_SZ);
+    g_snprintf(temp, sizeof(temp), "%d", priv->version);
+    memcpy(buffer,
+           temp,
+           MIN(strlen(temp), EDF_VERSION_SZ)
+    );
+
+    g_output_stream_write_all(
+        stream, buffer, EDF_VERSION_SZ, &sz, NULL, error
+    );
+
+    return sz;
 }
 
 static gsize
@@ -185,6 +208,25 @@ read_patient (EdfHeader* hdr, GInputStream* stream, GError** error)
 }
 
 static gsize
+write_patient(EdfHeader* header, GOutputStream* stream, GError** error)
+{
+    gsize sz;
+    EdfHeaderPrivate* priv = edf_header_get_instance_private(header);
+    char buffer[EDF_LOCAL_PATIENT_SZ];
+    memset(buffer, ' ', EDF_LOCAL_PATIENT_SZ);
+    memcpy(buffer,
+           priv->local_patient_identification->str,
+           MIN(priv->local_patient_identification->len, EDF_LOCAL_PATIENT_SZ)
+    );
+
+    g_output_stream_write_all(
+        stream, buffer, EDF_LOCAL_PATIENT_SZ, &sz, NULL, error
+    );
+    return sz;
+}
+
+
+static gsize
 read_recording (EdfHeader* hdr, GInputStream* stream, GError** error)
 {
     char temp[256];
@@ -205,6 +247,26 @@ read_recording (EdfHeader* hdr, GInputStream* stream, GError** error)
         );
     }
     return nread;
+}
+
+static gsize
+write_recording(EdfHeader* hdr, GOutputStream* stream, GError** error)
+{
+    gsize sz;
+    char buffer[EDF_LOCAL_RECORDING_SZ];
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+
+    memset(buffer, ' ', EDF_LOCAL_RECORDING_SZ);
+    memcpy(buffer,
+           priv->local_recording_identification->str,
+           MIN(priv->local_recording_identification->len, EDF_LOCAL_RECORDING_SZ)
+    );
+
+    g_output_stream_write_all(
+        stream, buffer, EDF_LOCAL_RECORDING_SZ, &sz, NULL, error
+    );
+
+    return sz;
 }
 
 static gsize
@@ -243,6 +305,30 @@ read_date (EdfHeader* hdr, GInputStream* stream, GError** error)
 
     set_date_ymd(hdr, y, m, d);
     return nread;
+}
+
+static gsize
+write_date(EdfHeader* hdr, GOutputStream* stream, GError **error) {
+    gsize sz;
+    char temp[EDF_START_DATE_SZ + 1];
+    char buffer[EDF_START_DATE_SZ];
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+
+    g_snprintf(temp, sizeof(temp), "%02d.%02d.%02d",
+                    g_date_time_get_day_of_month(priv->date_and_time),
+                    g_date_time_get_month(priv->date_and_time),
+                    g_date_time_get_year(priv->date_and_time) % 100
+    );
+    memset(buffer, ' ', EDF_START_DATE_SZ);
+    memcpy(buffer,
+           temp,
+           MIN(strlen(temp), EDF_START_DATE_SZ)
+    );
+    g_output_stream_write_all(
+        stream, buffer, EDF_START_DATE_SZ, &sz, NULL, error
+    );
+
+    return sz;
 }
 
 static gsize
@@ -286,7 +372,31 @@ read_time (EdfHeader* hdr, GInputStream* stream, GError** error)
 }
 
 static gsize
-read_num_bytes (EdfHeader* hdr, GInputStream* stream, GError** error)
+write_time(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    gsize sz;
+    char temp[EDF_START_TIME_SZ + 1];
+    char buffer[EDF_START_TIME_SZ];
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    memset(buffer, ' ', EDF_START_TIME_SZ);
+    g_snprintf(temp, sizeof(temp), "%02d.%02d.%02d",
+                    g_date_time_get_hour(priv->date_and_time),
+                    g_date_time_get_minute(priv->date_and_time),
+                    g_date_time_get_second(priv->date_and_time)
+    );
+    memcpy(buffer,
+           temp,
+           MIN(strlen(temp), EDF_START_TIME_SZ)
+    );
+    g_output_stream_write_all(
+        stream, buffer, EDF_START_TIME_SZ, &sz, NULL, error
+    );
+
+    return sz;
+}
+
+static gsize
+read_num_bytes(EdfHeader* hdr, GInputStream *stream, GError **error)
 {
     (void) hdr; // This function doesn't access hrd, but keep function signature
                 // similar to other read functions.
@@ -317,7 +427,26 @@ read_num_bytes (EdfHeader* hdr, GInputStream* stream, GError** error)
 }
 
 static gsize
-read_reserved (EdfHeader* hdr, GInputStream* stream, GError** error)
+write_num_bytes(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    gsize sz;
+    char buffer[EDF_NUM_BYTES_IN_HEADER_SZ];
+    char temp[EDF_NUM_BYTES_IN_HEADER_SZ + 1];
+    // Write header size
+    memset (buffer, ' ', EDF_NUM_BYTES_IN_HEADER_SZ);
+    g_snprintf(temp, sizeof(temp), "%d", edf_header_get_num_bytes(hdr));
+    memcpy(buffer,
+           temp,
+           MIN(strlen(temp), EDF_NUM_BYTES_IN_HEADER_SZ)
+    );
+    g_output_stream_write_all(
+        stream, buffer, EDF_NUM_BYTES_IN_HEADER_SZ, &sz, NULL, error
+    );
+    return sz;
+}
+
+static gsize
+read_reserved(EdfHeader* hdr, GInputStream *stream, GError **error)
 {
     char temp[256];
     gsize nread = 0;
@@ -342,7 +471,27 @@ read_reserved (EdfHeader* hdr, GInputStream* stream, GError** error)
 }
 
 static gsize
-read_num_records (EdfHeader* hdr, GInputStream* stream, GError** error)
+write_reserved(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    gsize sz;
+    char buffer[EDF_RESERVED_SZ];
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+
+    // Write reserved
+    memset (buffer, ' ', EDF_RESERVED_SZ);
+    memcpy(buffer,
+           priv->reserved->str,
+           MIN(priv->reserved->len, EDF_RESERVED_SZ)
+    );
+    g_output_stream_write_all(
+        stream, buffer, EDF_RESERVED_SZ, &sz, NULL, error
+    );
+
+    return sz;
+}
+
+static gsize
+read_num_records(EdfHeader* hdr, GInputStream *stream, GError **error)
 {
     char temp[256];
     gsize nread = 0;
@@ -367,7 +516,28 @@ read_num_records (EdfHeader* hdr, GInputStream* stream, GError** error)
 }
 
 static gsize
-read_dur_records (EdfHeader* hdr, GInputStream* stream, GError** error)
+write_num_records(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    gsize sz;
+    char temp[EDF_NUM_BYTES_IN_HEADER_SZ + 1];
+    char buffer[EDF_NUM_BYTES_IN_HEADER_SZ];
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+
+    memset (buffer, ' ', EDF_NUM_BYTES_IN_HEADER_SZ);
+    g_snprintf(temp, sizeof(temp), "%d", priv->num_records);
+    memcpy(buffer,
+           temp,
+           MIN(strlen(temp), EDF_NUM_DATA_REC_SZ)
+    );
+    g_output_stream_write_all(
+        stream, buffer, EDF_NUM_DATA_REC_SZ, &sz, NULL, error
+    );
+
+    return sz;
+}
+
+static gsize
+read_dur_records(EdfHeader* hdr, GInputStream* stream, GError** error)
 {
     char  temp[256];
     gsize nread = 0;
@@ -392,6 +562,26 @@ read_dur_records (EdfHeader* hdr, GInputStream* stream, GError** error)
 }
 
 static gsize
+write_dur_records(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    gsize sz;
+    char temp[EDF_DURATION_OF_DATA_RECORD_SZ + 1];
+    char buffer[EDF_DURATION_OF_DATA_RECORD_SZ];
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+
+    memset (buffer, ' ', EDF_DURATION_OF_DATA_RECORD_SZ);
+    g_snprintf(temp, sizeof(temp), "%lf", priv->duration_of_record);
+    memcpy(buffer,
+           temp,
+           MIN(strlen(temp), EDF_NUM_DATA_REC_SZ)
+    );
+    g_output_stream_write_all(
+        stream, buffer, EDF_NUM_DATA_REC_SZ, &sz, NULL, error
+    );
+    return sz;
+}
+
+static gsize
 read_num_signals (EdfHeader* hdr, GInputStream* stream, GError** error)
 {
     char  temp[256];
@@ -411,6 +601,26 @@ read_num_signals (EdfHeader* hdr, GInputStream* stream, GError** error)
     num_signals = g_ascii_strtoll(temp, NULL, 10);
     set_num_signals(hdr, num_signals);
     return nread;
+}
+
+static gsize
+write_num_signals (EdfHeader* hdr, GOutputStream* stream, GError **error)
+{
+    gsize sz;
+    char temp[EDF_NUM_SIGNALS_SZ + 1];
+    char buffer[EDF_NUM_SIGNALS_SZ];
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+
+    memset (buffer, ' ', EDF_NUM_SIGNALS_SZ);
+    g_snprintf(temp, sizeof(temp), "%d", priv->signals->len);
+    memcpy(buffer,
+           temp,
+           MIN(strlen(temp), EDF_NUM_SIGNALS_SZ)
+    );
+    g_output_stream_write_all(
+        stream, buffer, EDF_NUM_SIGNALS_SZ, &sz, NULL, error
+    );
+    return sz;
 }
 
 static gsize
@@ -454,6 +664,46 @@ read_signals (EdfHeader* hdr, GInputStream* stream, GError** error)
 }
 
 static gsize
+write_signals (EdfHeader* hdr, GOutputStream* stream, GError** error)
+{
+    gsize nwritten = 0;
+    EdfHeaderClass *klass = EDF_HEADER_GET_CLASS(hdr);
+
+    nwritten += klass->write_label(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_transducer(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_phys_dim(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_phys_min(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_phys_max(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_dig_min(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_dig_max(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_prefiltering(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_num_samples_per_rec(hdr, stream, error);
+    if (*error)
+        return nwritten;
+    nwritten += klass->write_sig_reserved(hdr, stream, error);
+    if (*error)
+        return nwritten;
+
+    return nwritten;
+}
+
+static gsize
 read_label (EdfHeader* hdr, GInputStream *stream, GError **error)
 {
     gsize nread = 0, nread_tot = 0;
@@ -475,6 +725,33 @@ read_label (EdfHeader* hdr, GInputStream *stream, GError **error)
         g_object_set(priv->signals->pdata[i], "label", temp, NULL);
     }
     return nread_tot;
+}
+
+static gsize
+write_label(EdfHeader *hdr, GOutputStream *stream, GError **error)
+{
+    EdfHeaderPrivate* priv = edf_header_get_instance_private(hdr);
+    char buffer[EDF_LABEL_SZ];
+    gsize sz, written_size = 0;
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        const char* var;
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+
+        memset(buffer, ' ', EDF_LABEL_SZ);
+        var = edf_signal_get_label(signal);
+        memcpy(buffer,
+               var,
+               MIN(strlen(var), EDF_LABEL_SZ)
+        );
+
+        g_output_stream_write_all(
+            stream, buffer, EDF_LABEL_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+        if (*error)
+            break;
+    }
+    return written_size;
 }
 
 static gsize
@@ -500,6 +777,35 @@ read_transducer (EdfHeader* hdr, GInputStream *stream, GError **error)
     }
     return nread_tot;
 }
+
+static gsize
+write_transducer (EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char buffer[EDF_TRANDUCER_TYPE_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        const char*var = edf_signal_get_transducer(signal);
+
+        memset(buffer, ' ', EDF_TRANDUCER_TYPE_SZ);
+        memcpy(buffer,
+               var,
+               MIN(strlen(var), EDF_TRANDUCER_TYPE_SZ)
+        );
+
+        g_output_stream_write_all(
+            stream, buffer, EDF_TRANDUCER_TYPE_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+        if (*error)
+            break;
+    }
+
+    return written_size;
+}
+
 static gsize
 read_phys_dim (EdfHeader* hdr, GInputStream *stream, GError **error)
 {
@@ -522,6 +828,34 @@ read_phys_dim (EdfHeader* hdr, GInputStream *stream, GError **error)
         g_object_set(priv->signals->pdata[i], "physical-dimension", temp, NULL);
     }
     return nread_tot;
+}
+
+static gsize
+write_phys_dim (EdfHeader* hdr, GOutputStream* stream, GError **error)
+{
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char buffer[EDF_PHYSICAL_DIMENSION_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        const char* var = edf_signal_get_physical_dimension(signal);
+
+        memset(buffer, ' ', EDF_PHYSICAL_DIMENSION_SZ);
+        memcpy(buffer,
+               var,
+               MIN(strlen(var), EDF_PHYSICAL_DIMENSION_SZ)
+        );
+
+        g_output_stream_write_all(
+            stream, buffer, EDF_PHYSICAL_DIMENSION_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+        if (*error)
+            break;
+    }
+
+    return written_size;
 }
 
 static gsize
@@ -550,6 +884,34 @@ read_phys_min (EdfHeader* hdr, GInputStream *stream, GError **error)
 }
 
 static gsize
+write_phys_min (EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char temp[EDF_PHYSICAL_MINIMUM_SZ + 1];
+    char buffer[EDF_PHYSICAL_MINIMUM_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        gdouble doublevar = edf_signal_get_physical_min(signal);
+
+        memset(buffer, ' ', EDF_PHYSICAL_MINIMUM_SZ);
+        g_snprintf(temp, sizeof(temp), "%lf", doublevar);
+        memcpy(buffer,
+               temp,
+               MIN(strlen(temp), EDF_PHYSICAL_MINIMUM_SZ)
+        );
+        g_output_stream_write_all(
+            stream, buffer, EDF_PHYSICAL_MINIMUM_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+        if (*error)
+            break;
+    }
+    return written_size;
+}
+
+static gsize
 read_phys_max (EdfHeader* hdr, GInputStream *stream, GError **error)
 {
     gsize nread = 0, nread_tot = 0;
@@ -572,6 +934,34 @@ read_phys_max (EdfHeader* hdr, GInputStream *stream, GError **error)
         g_object_set(priv->signals->pdata[i], "physical-max", val, NULL);
     }
     return nread_tot;
+}
+
+static gsize
+write_phys_max (EdfHeader* hdr, GOutputStream *stream, GError **error) {
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char temp[EDF_PHYSICAL_MAXIMUM_SZ + 1];
+    char buffer[EDF_PHYSICAL_MAXIMUM_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        gdouble doublevar = edf_signal_get_physical_max(signal);
+
+        memset(buffer, ' ', EDF_PHYSICAL_MAXIMUM_SZ);
+        g_snprintf(temp, sizeof(temp), "%lf", doublevar);
+        memcpy(buffer,
+               temp,
+               MIN(strlen(temp), EDF_PHYSICAL_MAXIMUM_SZ)
+        );
+        g_output_stream_write_all(
+            stream, buffer, EDF_PHYSICAL_MAXIMUM_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+
+        if (*error)
+            break;
+    }
+    return written_size;
 }
 
 static gsize
@@ -600,6 +990,36 @@ read_dig_min (EdfHeader* hdr, GInputStream *stream, GError **error)
 }
 
 static gsize
+write_dig_min(EdfHeader* hdr, GOutputStream *stream, GError **error) {
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char temp[EDF_DIGITAL_MINIMUM_SZ + 1];
+    char buffer[EDF_DIGITAL_MINIMUM_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        gint intvar = edf_signal_get_digital_min(signal);
+
+        memset(buffer, ' ', EDF_DIGITAL_MINIMUM_SZ);
+        g_snprintf(temp, sizeof(temp), "%d", intvar);
+        memcpy(buffer,
+               temp,
+               MIN(strlen(temp), EDF_DIGITAL_MINIMUM_SZ)
+        );
+        g_output_stream_write_all(
+            stream, buffer, EDF_DIGITAL_MINIMUM_SZ, &sz, NULL, error
+        );
+
+        written_size += sz;
+
+        if (*error)
+            break;
+    }
+
+    return written_size;
+}
+
+static gsize
 read_dig_max (EdfHeader* hdr, GInputStream *stream, GError **error)
 {
     gsize nread = 0, nread_tot = 0;
@@ -625,6 +1045,36 @@ read_dig_max (EdfHeader* hdr, GInputStream *stream, GError **error)
 }
 
 static gsize
+write_dig_max(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char temp[EDF_DIGITAL_MAXIMUM_SZ + 1];
+    char buffer[EDF_DIGITAL_MAXIMUM_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        gint intvar = edf_signal_get_digital_max(signal);
+
+        memset(buffer, ' ', EDF_DIGITAL_MAXIMUM_SZ);
+        g_snprintf(temp, sizeof(temp), "%d", intvar);
+        memcpy(buffer,
+               temp,
+               MIN(strlen(temp), EDF_DIGITAL_MAXIMUM_SZ)
+        );
+        g_output_stream_write_all(
+            stream, buffer, EDF_DIGITAL_MAXIMUM_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+
+        if (*error)
+            break;
+    }
+
+    return written_size;
+}
+
+static gsize
 read_prefiltering (EdfHeader* hdr, GInputStream *stream, GError **error)
 {
     gsize nread = 0, nread_tot = 0;
@@ -646,6 +1096,35 @@ read_prefiltering (EdfHeader* hdr, GInputStream *stream, GError **error)
         g_object_set(priv->signals->pdata[i], "prefilter", temp, NULL);
     }
     return nread_tot;
+}
+
+static gsize
+write_prefiltering(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char buffer[EDF_PREFILTERING_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        const char* var = edf_signal_get_prefiltering(signal);
+
+        memset(buffer, ' ', EDF_PREFILTERING_SZ);
+        memcpy(buffer,
+               var,
+               MIN(strlen(var), EDF_PREFILTERING_SZ)
+        );
+
+        g_output_stream_write_all(
+            stream, buffer, EDF_PREFILTERING_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+
+        if (*error)
+            break;
+    }
+
+    return written_size;
 }
 
 static gsize
@@ -674,6 +1153,36 @@ read_num_samples_per_rec (EdfHeader* hdr, GInputStream *stream, GError **error)
 }
 
 static gsize
+write_num_samples_per_rec(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char temp[EDF_NUM_SAMPLES_PER_RECORD_SZ + 1];
+    char buffer[EDF_NUM_SAMPLES_PER_RECORD_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        guint32 guintvar = edf_signal_get_num_samples_per_record(signal);
+
+        memset(buffer, ' ', EDF_NUM_SAMPLES_PER_RECORD_SZ);
+        g_snprintf(temp, sizeof(temp), "%u", guintvar);
+        memcpy(buffer,
+               temp,
+               MIN(strlen(temp), EDF_NUM_SAMPLES_PER_RECORD_SZ)
+        );
+
+        g_output_stream_write_all(
+            stream, buffer, EDF_NUM_SAMPLES_PER_RECORD_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+        if (*error)
+            break;
+    }
+
+    return written_size;
+}
+
+static gsize
 read_sig_reserved (EdfHeader* hdr, GInputStream *stream, GError **error)
 {
     gsize nread = 0, nread_tot = 0;
@@ -695,6 +1204,34 @@ read_sig_reserved (EdfHeader* hdr, GInputStream *stream, GError **error)
         g_object_set(priv->signals->pdata[i], "reserved", temp, NULL);
     }
     return nread_tot;
+}
+
+static gsize
+write_sig_reserved(EdfHeader* hdr, GOutputStream *stream, GError **error)
+{
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(hdr);
+    char buffer[EDF_NS_RESERVED_SZ];
+    gsize sz, written_size = 0;
+
+    for (gsize i = 0; i < priv->signals->len; i++) {
+        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
+        const char*var = edf_signal_get_reserved(signal);
+
+        memset(buffer, ' ', EDF_NS_RESERVED_SZ);
+        memcpy(buffer,
+               var,
+               MIN(strlen(var), EDF_NS_RESERVED_SZ)
+        );
+
+        g_output_stream_write_all(
+            stream, buffer, EDF_NS_RESERVED_SZ, &sz, NULL, error
+        );
+        written_size += sz;
+        if (*error)
+            break;
+    }
+
+    return written_size;
 }
 
 static void
@@ -876,6 +1413,7 @@ edf_header_class_init(EdfHeaderClass* klass)
     object_class->dispose = edf_header_dispose;
     object_class->finalize = edf_header_finalize;
 
+    // Reading the fixed header from file
     klass->read_version = read_version;
     klass->read_patient = read_patient;
     klass->read_recording = read_recording;
@@ -899,6 +1437,31 @@ edf_header_class_init(EdfHeaderClass* klass)
     klass->read_prefiltering = read_prefiltering;
     klass->read_num_samples_per_rec = read_num_samples_per_rec;
     klass->read_sig_reserved = read_sig_reserved;
+
+    // Writing the fixed header from file
+    klass->write_version = write_version;
+    klass->write_patient = write_patient;
+    klass->write_recording = write_recording;
+    klass->write_date = write_date;
+    klass->write_time = write_time;
+    klass->write_num_bytes = write_num_bytes;
+    klass->write_reserved = write_reserved;
+    klass->write_num_records = write_num_records;
+    klass->write_dur_records = write_dur_records;
+    klass->write_num_signals = write_num_signals;
+    klass->write_signals = write_signals;
+
+    // Writing the signal related information from the header
+    klass->write_label = write_label;
+    klass->write_transducer = write_transducer;
+    klass->write_phys_dim = write_phys_dim;
+    klass->write_phys_min = write_phys_min;
+    klass->write_phys_max = write_phys_max;
+    klass->write_dig_min = write_dig_min;
+    klass->write_dig_max = write_dig_max;
+    klass->write_prefiltering = write_prefiltering;
+    klass->write_num_samples_per_rec = write_num_samples_per_rec;
+    klass->write_sig_reserved = write_sig_reserved;
 
     /**
      * EdfHeader:version:
@@ -1104,367 +1667,64 @@ edf_header_write_to_ostream(
         GError        **error
         )
 {
-    gchar buffer[256];
-    gsize written_size, sz;
-    GString* temp;
-    gboolean result;
+    gsize sz;
 
     g_return_val_if_fail(EDF_IS_HEADER(header) && G_IS_OUTPUT_STREAM(ostream), 0);
     g_return_val_if_fail(error == NULL || error != NULL, 0);
 
-    header_update(header);
+    EdfHeaderClass* klass = EDF_HEADER_GET_CLASS(header);
+    sz = 0;
 
-    temp = g_string_sized_new(256);
-    EdfHeaderPrivate* priv = edf_header_get_instance_private(header);
-    written_size = 0;
+    header_update(header); // Make sure nrecords is up to date.
 
-    // Write version
-    memset (buffer, ' ', EDF_VERSION_SZ);
-    g_string_printf(temp, "%d", priv->version);
-    memcpy(buffer,
-            temp->str,
-            MIN(temp->len, EDF_VERSION_SZ)
-          );
+    sz += klass->write_version(header, ostream, error);
+    if (*error)
+        return sz;
 
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_VERSION_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
+    sz += klass->write_patient(header, ostream, error);
+    if (*error)
+        return sz;
 
-    // Write local patient info 
-    memset(buffer, ' ', EDF_LOCAL_PATIENT_SZ);
-    memcpy(buffer,
-            priv->local_patient_identification->str,
-            MIN(priv->local_patient_identification->len, EDF_LOCAL_PATIENT_SZ)
-          );
+    sz += klass->write_recording(header, ostream, error);
+    if (*error)
+        return sz;
 
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_LOCAL_PATIENT_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
-    
-    // Write local recording info 
-    memset(buffer, ' ', EDF_LOCAL_RECORDING_SZ);
-    memcpy(buffer,
-            priv->local_recording_identification->str,
-            MIN(priv->local_recording_identification->len, EDF_LOCAL_RECORDING_SZ)
-          );
+    sz += klass->write_date(header, ostream, error);
+    if (*error)
+        return sz;
 
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_LOCAL_RECORDING_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
-    
-    // Write date
-    memset(buffer, ' ', EDF_START_DATE_SZ);
-    g_string_printf(temp, "%02d.%02d.%02d",
-            g_date_time_get_day_of_month(priv->date_and_time),
-            g_date_time_get_month(priv->date_and_time),
-            g_date_time_get_year(priv->date_and_time) % 100
-            );
-    memcpy(buffer,
-            temp->str,
-            MIN(temp->len, EDF_START_DATE_SZ)
-          );
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_START_DATE_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
-    
-    // Write time 
-    memset(buffer, ' ', EDF_START_TIME_SZ);
-    g_string_printf(temp, "%02d.%02d.%02d",
-            g_date_time_get_hour(priv->date_and_time),
-            g_date_time_get_minute(priv->date_and_time),
-            g_date_time_get_second(priv->date_and_time)
-            );
-    memcpy(buffer,
-            temp->str,
-            MIN(temp->len, EDF_START_TIME_SZ)
-          );
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_START_TIME_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
-    
-    // Write header size
-    memset (buffer, ' ', EDF_NUM_BYTES_IN_HEADER_SZ);
-    g_string_printf(temp, "%d", edf_header_get_num_bytes(header));
-    memcpy(buffer,
-            temp->str,
-            MIN(temp->len, EDF_NUM_BYTES_IN_HEADER_SZ)
-          );
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_NUM_BYTES_IN_HEADER_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
-    
-    // Write reserved
-    memset (buffer, ' ', EDF_RESERVED_SZ);
-    memcpy(buffer,
-            priv->reserved->str,
-            MIN(priv->reserved->len, EDF_RESERVED_SZ)
-          );
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_RESERVED_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
-    
-    // Write number of data records
-    memset (buffer, ' ', EDF_NUM_DATA_REC_SZ);
-    g_string_printf(temp, "%d", priv->num_records);
-    memcpy(buffer,
-            temp->str,
-            MIN(temp->len, EDF_NUM_DATA_REC_SZ)
-          );
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_NUM_DATA_REC_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
-    
-    // Write duration of data records
-    memset (buffer, ' ', EDF_DURATION_OF_DATA_RECORD_SZ);
-    g_string_printf(temp, "%lf", priv->duration_of_record);
-    memcpy(buffer,
-            temp->str,
-            MIN(temp->len, EDF_NUM_DATA_REC_SZ)
-          );
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_NUM_DATA_REC_SZ, &sz, NULL, error
-            );
-    written_size += sz;
-    if (!result)
-        goto fail;
+    sz += klass->write_time(header, ostream, error);
+    if (*error)
+        return sz;
 
-    // Write number of signals
-    memset (buffer, ' ', EDF_NUM_SIGNALS_SZ);
-    g_string_printf(temp, "%d", priv->signals->len);
-    memcpy(buffer,
-            temp->str,
-            MIN(temp->len, EDF_NUM_SIGNALS_SZ)
-          );
-    result = g_output_stream_write_all(
-            ostream, buffer, EDF_NUM_SIGNALS_SZ, &sz, NULL, error
-            );
-    written_size += sz;
+    sz += klass->write_num_bytes(header, ostream, error);
+    if (*error)
+        return sz;
 
-    if (!result)
-        goto fail;
+    sz += klass->write_reserved(header, ostream, error);
+    if (*error)
+        return sz;
 
-    // Write Signal related header info
-    // Write labels
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        const char* var;
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        
-        memset(buffer, ' ', EDF_LABEL_SZ);
-        var = edf_signal_get_label(signal);
-        memcpy(buffer,
-               var,
-               MIN(strlen(var), EDF_LABEL_SZ)
-               );
+    sz += klass->write_num_records(header, ostream, error);
+    if (*error)
+        return sz;
 
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_LABEL_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
+    sz += klass->write_dur_records(header, ostream, error);
+    if (*error)
+        return sz;
 
-    // Write transducers
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        const char*var = edf_signal_get_transducer(signal);
+    sz += klass->write_num_signals(header, ostream, error);
+    if (*error)
+        return sz;
 
-        memset(buffer, ' ', EDF_TRANDUCER_TYPE_SZ);
-        memcpy(buffer,
-               var,
-               MIN(strlen(var), EDF_TRANDUCER_TYPE_SZ)
-               );
+    // write the signal related info to the header.
+    sz += klass->write_signals(header, ostream, error);
+    if (*error)
+        return sz;
 
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_TRANDUCER_TYPE_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
+    g_assert(sz == (gsize)edf_header_get_num_bytes(header));
 
-    // Write physical dimension
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        const char* var = edf_signal_get_physical_dimension(signal);
-
-        memset(buffer, ' ', EDF_PHYSICAL_DIMENSION_SZ);
-        memcpy(buffer,
-               var,
-               MIN(strlen(var), EDF_PHYSICAL_DIMENSION_SZ)
-               );
-
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_PHYSICAL_DIMENSION_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
-        
-    // Write physical minimum
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        gdouble doublevar = edf_signal_get_physical_min(signal);
-
-        memset(buffer, ' ', EDF_PHYSICAL_MINIMUM_SZ);
-        g_string_printf(temp, "%lf", doublevar);
-        memcpy(buffer,
-                temp->str,
-                MIN(temp->len, EDF_PHYSICAL_MINIMUM_SZ)
-              );
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_PHYSICAL_MINIMUM_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
-
-    // Write physical maximum
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        gdouble doublevar = edf_signal_get_physical_max(signal);
-
-        memset(buffer, ' ', EDF_PHYSICAL_MAXIMUM_SZ);
-        g_string_printf(temp, "%lf", doublevar);
-        memcpy(buffer,
-                temp->str,
-                MIN(temp->len, EDF_PHYSICAL_MAXIMUM_SZ)
-              );
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_PHYSICAL_MAXIMUM_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
-
-    // Write digital minimum
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        gint intvar = edf_signal_get_digital_min(signal);
-
-        memset(buffer, ' ', EDF_DIGITAL_MINIMUM_SZ);
-        g_string_printf(temp, "%d", intvar);
-        memcpy(buffer,
-                temp->str,
-                MIN(temp->len, EDF_DIGITAL_MINIMUM_SZ)
-              );
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_DIGITAL_MINIMUM_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
-
-    // Write digital maximum
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        gint intvar = edf_signal_get_digital_max(signal);
-
-        memset(buffer, ' ', EDF_DIGITAL_MAXIMUM_SZ);
-        g_string_printf(temp, "%d", intvar);
-        memcpy(buffer,
-                temp->str,
-                MIN(temp->len, EDF_DIGITAL_MAXIMUM_SZ)
-              );
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_DIGITAL_MAXIMUM_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
-
-    // write prefiltering
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        const char* var = edf_signal_get_prefiltering(signal);
-        
-        memset(buffer, ' ', EDF_PREFILTERING_SZ);
-        memcpy(buffer,
-               var,
-               MIN(strlen(var), EDF_PREFILTERING_SZ)
-               );
-
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_PREFILTERING_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
-        
-    // write num samples per records 
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        guint32 guintvar = edf_signal_get_num_samples_per_record(signal);
-        
-        memset(buffer, ' ', EDF_NUM_SAMPLES_PER_RECORD_SZ);
-        g_string_printf(temp, "%u", guintvar);
-        memcpy(buffer,
-               temp->str,
-               MIN(temp->len, EDF_NUM_SAMPLES_PER_RECORD_SZ)
-               );
-
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_NUM_SAMPLES_PER_RECORD_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
-
-    // write signal reserved
-    for (gsize i = 0; i < priv->signals->len; i++) {
-        EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        const char*var = edf_signal_get_reserved(signal);
-        
-        memset(buffer, ' ', EDF_NS_RESERVED_SZ);
-        memcpy(buffer,
-               var,
-               MIN(strlen(var), EDF_NS_RESERVED_SZ)
-               );
-
-        result = g_output_stream_write_all(
-                ostream, buffer, EDF_NS_RESERVED_SZ, &sz, NULL, error
-                );
-        written_size += sz;
-        if (!result)
-            goto fail;
-    }
-
-    g_assert(written_size == (gsize)edf_header_get_num_bytes(header));
-
-fail:
-    g_string_free(temp, TRUE);
-    return written_size;
+    return sz;
 }
 
 /**

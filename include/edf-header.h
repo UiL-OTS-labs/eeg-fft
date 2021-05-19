@@ -57,6 +57,31 @@ struct _EdfHeaderClass {
     gsize (*read_num_samples_per_rec) (EdfHeader* hdr, GInputStream *stream, GError **error);
     gsize (*read_sig_reserved) (EdfHeader* hdr, GInputStream *stream, GError **error);
 
+    // writing a header
+    gsize (*write_version) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_patient) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_recording) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_date) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_time) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_num_bytes) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_reserved) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_num_records) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_dur_records) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_num_signals) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+    gsize (*write_signals) (EdfHeader* hdr, GOutputStream* stream, GError** error);
+
+    // Write the signal related information from the header
+    gsize (*write_label) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_transducer) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_phys_dim) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_phys_min) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_phys_max) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_dig_min) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_dig_max) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_prefiltering) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_num_samples_per_rec) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+    gsize (*write_sig_reserved) (EdfHeader* hdr, GOutputStream *stream, GError **error);
+
 };
 
 G_MODULE_EXPORT EdfHeader*
