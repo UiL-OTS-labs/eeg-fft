@@ -1388,7 +1388,7 @@ edf_header_write_to_ostream(
     // Write digital maximum
     for (gsize i = 0; i < priv->signals->len; i++) {
         EdfSignal* signal = g_ptr_array_index(priv->signals, i);
-        gint intvar = edf_signal_get_physical_max(signal);
+        gint intvar = edf_signal_get_digital_max(signal);
 
         memset(buffer, ' ', EDF_DIGITAL_MAXIMUM_SZ);
         g_string_printf(temp, "%d", intvar);

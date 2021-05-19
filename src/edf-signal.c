@@ -978,7 +978,7 @@ edf_signal_set_num_samples_per_record(EdfSignal* signal, guint num_samples)
 
 /**
  * edf_signal_get_values
- * @signal: the signal whos value you would like to read.
+ * @signal: the signal whose value you would like to read.
  *
  * Returns:(transfer full) (element-type gdouble): A list of doubles that is represents
  * the signal that is recorded.

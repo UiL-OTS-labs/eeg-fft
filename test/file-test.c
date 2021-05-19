@@ -5,11 +5,19 @@
 #include <time.h>
 #include <math.h>
 
+/* ************ declarations ********** */
+
+typedef struct FileFixture {
+    EdfFile* file;
+    gdouble  jitter;
+} FileFixture;
+
+
 /* ******** global constants ********* */
-//static const char* SUITE_NAME = "EdfFileSuite";
 
 // A default name to use for an edf file
 const gchar* default_name = "hello-world.edf";
+double g_jitter = 20;
 
 typedef struct {
     int         version;
@@ -75,35 +83,8 @@ signal_info sig_info[2] = {
 };
 
 
-
-/* ******** global variables ********* */
-
-/* initialized in file_test_init and destroyed in file_test_finalize */
-static gchar* temp_dir;
-
-static int 
-file_test_init(void)
-{
-    gchar template[1024] = "gedf_unit_test_XXXXXX";
-    GError* error = NULL;
-    temp_dir = g_dir_make_tmp(template, &error);
-    if (error) {
-        g_printerr("Unable to open temp dir: %s\n", error->message);
-        g_error_free(error);
-        return -1;
-    }
-    else
-        g_print("Created directory: %s\n", temp_dir);
-    return 0;
-}
-
-static int 
-file_test_finalize(void)
-{
-    g_free(temp_dir);
-    temp_dir = NULL;
-    return 0;
-}
+static gchar g_temp_dir[1024] = "";
+static gchar g_temp_file[1024] = "";
 
 /* ******* utility functions ************ */
 
@@ -112,17 +93,17 @@ double jitter(GRand* dev, double amplitude) {
     return g_rand_double_range(dev, -halve_range, halve_range);
 }
 
-static void 
+static void
 fill_signal(
-        EdfSignal  *sig,
-        double      freq,
-        double      amplitude,
-        double      offset,
-        unsigned    sr,
-        size_t      num_samples,
-        double      jitter_amplitude,
-        GError    **error
-        )
+    EdfSignal  *sig,
+    double      freq,
+    double      amplitude,
+    double      offset,
+    unsigned    sr,
+    size_t      num_samples,
+    double      jitter_amplitude,
+    GError    **error
+)
 {
     GRand *randdev = g_rand_new();
     (void) jitter_amplitude;
@@ -138,6 +119,127 @@ fill_signal(
             break;
     }
     g_rand_free(randdev);
+}
+
+
+static int
+file_test_init(void)
+{
+    gchar template[1024] = "gedf_unit_test_XXXXXX";
+    GError *error = NULL;
+    char *temp_dir = g_dir_make_tmp(template, &error);
+
+    if (error) {
+        g_printerr("Unable to open temp dir: %s\n", error->message);
+        g_error_free(error);
+        return -1;
+    } else {
+        g_print("Created directory: %s\n", temp_dir);
+    }
+    g_snprintf(g_temp_dir, sizeof(g_temp_dir), "%s", temp_dir);
+    g_free(temp_dir);
+    g_snprintf(g_temp_file, sizeof(g_temp_file), "%s/%s",
+               g_temp_dir, default_name);
+    return 0;
+}
+
+static void
+file_fixture_set_up(FileFixture* fixture, gconstpointer data)
+{
+    (void) data;
+    fixture->file = edf_file_new_for_path(g_temp_file);
+    EdfHeader* header = NULL;
+
+    g_object_get(G_OBJECT(fixture->file),
+                 "header", &header,
+                 NULL
+    );
+
+    g_object_set(
+        G_OBJECT(header),
+        "patient-identification", hdr_info.loc_patient,
+        "recording-identification", hdr_info.loc_recording,
+        "reserved", hdr_info.reserved,
+        "duration-of-record", hdr_info.dur_record,
+        NULL
+    );
+
+    // Create and fill 2 signals
+    EdfSignal *signal1 = edf_signal_new();
+    EdfSignal *signal2 = edf_signal_new();
+    g_object_set(signal1,
+                 "label", sig_info[0].label,
+                 "transducer", sig_info[0].transducer,
+                 "physical-dimension", sig_info[0].phys_dim,
+                 "physical-min", sig_info[0].phys_min,
+                 "physical-max", sig_info[0].phys_max,
+                 "digital-min", sig_info[0].digital_min,
+                 "digital-max", sig_info[0].digital_max,
+                 "prefilter", sig_info[0].prefiltering,
+                 "ns", sig_info[0].num_samples_per_record,
+                 "reserved", sig_info[0].sig_reserved,
+                 NULL
+    );
+    g_object_set(signal2,
+                 "label", sig_info[1].label,
+                 "transducer", sig_info[1].transducer,
+                 "physical-dimension", sig_info[1].phys_dim,
+                 "physical-min", sig_info[1].phys_min,
+                 "physical-max", sig_info[1].phys_max,
+                 "digital-min", sig_info[1].digital_min,
+                 "digital-max", sig_info[1].digital_max,
+                 "prefilter", sig_info[1].prefiltering,
+                 "ns", sig_info[1].num_samples_per_record,
+                 "reserved", sig_info[1].sig_reserved,
+                 NULL
+    );
+    edf_file_add_signal(fixture->file, signal1);
+    edf_file_add_signal(fixture->file, signal2);
+
+    // Fill signals with generated signals
+    unsigned sr = sig_info[0].num_samples_per_record;
+    unsigned num_samples = sr * hdr_info.num_records;
+    double hz = 10;
+    double amplitude = 100;
+    double offset = 400;
+    double jitter_amplitude = 20;
+
+    GError* error = NULL;
+    fill_signal(
+        signal1, hz, amplitude, offset, sr, num_samples, jitter_amplitude,
+        &error
+    );
+    if (error) {
+        g_printerr("%s\n", error->message);
+        error = NULL;
+        g_assert_not_reached();
+    }
+    sr = sig_info[1].num_samples_per_record;
+    num_samples = sr * hdr_info.num_records;
+    hz = 20;
+    amplitude = 50;
+    offset = 440;
+    jitter_amplitude = 5;
+    fill_signal(
+        signal2, hz, amplitude, offset, sr, num_samples, jitter_amplitude,
+        &error
+    );
+    if (error) {
+        g_printerr("%s\n", error->message);
+        g_error_free(error);
+        error = NULL;
+        g_assert_not_reached();
+    }
+    g_object_unref(header);
+    g_object_unref(signal1);
+    g_object_unref(signal2);
+}
+
+static void
+file_fixture_tear_down(FileFixture* fixture, gconstpointer unused)
+{
+    (void) unused;
+    g_clear_object(&fixture->file);
 }
 
 /* ******* tests ******** */
@@ -172,18 +274,14 @@ static void
 file_name()
 {
     EdfFile* file = NULL;
-    file = edf_file_new_for_path(default_name);
-    const gchar* cname = "hello-world.edf";
-    gchar *build_name = NULL, *name_ret = NULL;
-    build_name = g_build_filename(temp_dir, cname, NULL);
+    file = edf_file_new(default_name);
 
-    edf_file_set_path(file, build_name);
-    name_ret = edf_file_get_path(file);
+    edf_file_set_path(file, g_temp_file);
+    char* name_ret = edf_file_get_path(file);
 
-    g_assert_cmpstr(name_ret, ==, build_name);
+    g_assert_cmpstr(name_ret, ==, g_temp_file);
 
     g_free(name_ret);
-    g_free(build_name);
 
     g_object_unref(file);
 }
@@ -191,23 +289,21 @@ file_name()
 static void
 file_open_writing()
 {
-    EdfFile* file = NULL;
-    GError* error = NULL;
-
-    gchar* tempfile = g_build_filename(temp_dir, "temp.edf", NULL);
-    file  = edf_file_new_for_path(tempfile);
+    GError  *error = NULL;
+    EdfFile *file  = edf_file_new_for_path(g_temp_file);
 
     edf_file_create(file, &error);
     g_assert_no_error(error);
-    if(error) {
-        g_printerr("Unable to open '%s':\n\t- %s\n", tempfile, error->message);
+    if (error) {
+        g_printerr("Unable to open '%s':\n\t- %s\n",
+                   g_temp_file, error->message);
         g_error_free(error);
         error = NULL;
     }
     
     edf_file_create(file, &error);
     g_assert_error(error, g_io_error_quark(), G_IO_ERROR_EXISTS);
-    if(error) {
+    if (error) {
         g_error_free(error);
         error = NULL;
         edf_file_replace(file, &error);
@@ -216,128 +312,117 @@ file_open_writing()
             g_error_free(error);
     }
 
-
-    g_free(tempfile);
     edf_file_destroy(file);
 }
 
 static void
-file_write_with_elaborate_header_and_signals()
+file_write_with_elaborate_header_and_signals(
+    FileFixture* fixture,
+    gconstpointer unused
+    )
 {
-    EdfFile* file = NULL;
-    EdfSignal* signal1 = NULL, *signal2 = NULL;
+    (void) unused;
     GError* error = NULL;
-    EdfHeader* header = NULL;
 
-    // Create file
-    gchar* tempfile = g_build_filename(temp_dir, default_name, NULL);
-    file = edf_file_new_for_path(tempfile);
-
-    g_object_get(G_OBJECT(file),
-            "header", &header,
-            NULL
-            );
-
-    g_object_set(
-            G_OBJECT(header),
-            "patient-identification", hdr_info.loc_patient,
-            "recording-identification", hdr_info.loc_recording,
-            "reserved", hdr_info.reserved,
-            "duration-of-record", hdr_info.dur_record,
-            NULL
-            );
-
-    // Create and fill 2 signals
-    signal1 = edf_signal_new();
-    signal2 = edf_signal_new();
-    g_object_set(signal1,
-            "label", sig_info[0].label,
-            "transducer", sig_info[0].transducer,
-            "physical-dimension", sig_info[0].phys_dim,
-            "physical-min", sig_info[0].phys_min,
-            "physical-max", sig_info[0].phys_max,
-            "digital-min", sig_info[0].digital_min,
-            "digital-max", sig_info[0].digital_max,
-            "prefilter", sig_info[0].prefiltering,
-            "ns", sig_info[0].num_samples_per_record,
-            "reserved", sig_info[0].sig_reserved,
-            NULL
-            );
-    g_object_set(signal2,
-            "label", sig_info[1].label,
-            "transducer", sig_info[1].transducer,
-            "physical-dimension", sig_info[1].phys_dim,
-            "physical-min", sig_info[1].phys_min,
-            "physical-max", sig_info[1].phys_max,
-            "digital-min", sig_info[1].digital_min,
-            "digital-max", sig_info[1].digital_max,
-            "prefilter", sig_info[1].prefiltering,
-            "ns", sig_info[1].num_samples_per_record,
-            "reserved", sig_info[1].sig_reserved,
-            NULL
-            );
-    edf_file_add_signal(file, signal1);
-    edf_file_add_signal(file, signal2);
-
-    // Fill signals with generated signals
-    unsigned sr = sig_info[0].num_samples_per_record;
-    unsigned num_samples = sr * hdr_info.num_records;
-    double hz = 10;
-    double amplitude = 100;
-    double offset = 400;
-    double jitter_amplitude = 20;
-
-    fill_signal(
-            signal1, hz, amplitude, offset, sr, num_samples, jitter_amplitude,
-            &error
-            );
-    if (error) {
-        g_printerr("%s\n", error->message);
-        goto fail;
-    }
-    sr = sig_info[1].num_samples_per_record;
-    num_samples = sr * hdr_info.num_records;
-    hz = 20;
-    amplitude = 50;
-    offset = 440;
-    jitter_amplitude = 5;
-    fill_signal(
-            signal2, hz, amplitude, offset, sr, num_samples, jitter_amplitude,
-            &error
-            );
-    if (error) {
-        g_printerr("%s\n", error->message);
-        goto fail;
-    }
-    
-    edf_file_replace(file, &error);
-    g_assert_no_error(error);
-    if (error) {
-        g_printerr("%s oops: %s", __func__, error->message);
-        goto fail;
-    }
-
-fail:
-    g_free(tempfile);
-    g_object_unref(file);
-    g_object_unref(header);
-    g_object_unref(signal1);
-    g_object_unref(signal2);
+    edf_file_replace(fixture->file, &error);
     if (error)
-        g_error_free(error);
+        g_printerr("%s oops: %s", __func__, error->message);
+}
+
+static gboolean
+check_signal_equality(EdfFile* f1, EdfFile* f2)
+{
+    gboolean ret = FALSE;
+    GPtrArray *sigs1, *sigs2;
+    sigs1 = edf_file_get_signals(f1);
+    sigs2 = edf_file_get_signals(f2);
+
+    if (sigs1->len != sigs2->len)
+        goto end;
+
+    for (size_t i = 0; i < sigs1->len; i++) {
+        EdfSignal *sig1, *sig2;
+        const char *label1 = NULL, *label2 = NULL;
+        const char *trans1= NULL, *trans2 = NULL;
+        const char *pdim1= NULL, *pdim2= NULL;
+        double pmin1, pmin2;
+        double pmax1, pmax2;
+        int dmin1, dmin2;
+        int dmax1, dmax2;
+        const char* prefiltering1, *prefiltering2;
+        int ns1, ns2;
+        const char* res1, *res2;
+
+        sig1 = g_ptr_array_index(sigs1, i);
+        sig2 = g_ptr_array_index(sigs2, i);
+
+        label1 = edf_signal_get_label(sig1);
+        label2 = edf_signal_get_label(sig2);
+
+        trans1 = edf_signal_get_transducer(sig1);
+        trans2 = edf_signal_get_transducer(sig2);
+
+        pdim1 = edf_signal_get_physical_dimension(sig1);
+        pdim2 = edf_signal_get_physical_dimension(sig2);
+
+        pmin1 = edf_signal_get_physical_min(sig1);
+        pmin2 = edf_signal_get_physical_min(sig2);
+
+        pmax1 = edf_signal_get_physical_max(sig1);
+        pmax2 = edf_signal_get_physical_max(sig2);
+
+        dmin1 = edf_signal_get_digital_min(sig1);
+        dmin2 = edf_signal_get_digital_min(sig2);
+
+        dmax1 = edf_signal_get_digital_max(sig1);
+        dmax2 = edf_signal_get_digital_max(sig2);
+
+        prefiltering1 = edf_signal_get_prefiltering(sig1);
+        prefiltering2 = edf_signal_get_prefiltering(sig2);
+
+        ns1 = edf_signal_get_num_samples_per_record(sig1);
+        ns2 = edf_signal_get_num_samples_per_record(sig2);
+
+        res1 = edf_signal_get_reserved(sig1);
+        res2 = edf_signal_get_reserved(sig2);
+
+        if (g_strcmp0(label1, label2) != 0)
+            goto end;
+        if (g_strcmp0(trans1, trans2) != 0)
+            goto end;
+        if (g_strcmp0(pdim1, pdim2) != 0)
+            goto end;
+
+        if (pmin1 != pmin2)
+            goto end;
+        if (pmax1 != pmax2)
+            goto end;
+        if (dmin1 != dmin2)
+            goto end;
+        if (dmax1 != dmax2)
+            goto end;
+
+        if(ns1 != ns2)
+            goto end;
+
+        if (g_strcmp0(prefiltering1, prefiltering2) != 0)
+            goto end;
+        if (g_strcmp0(res1, res2) != 0)
+            goto end;
+    }
+
+    ret = TRUE;
+end:
+    return ret;
 }
 
 static void
-file_open_reading()
+file_open_reading(FileFixture* fixture, gconstpointer unused)
 {
-    EdfFile *file = NULL;
-    GError  *error = NULL;
-    EdfHeader* hdr = NULL;
-    gchar   *tempfile = g_build_filename(
-            temp_dir,
-            default_name,
-            NULL
-            );
+    (void) unused;
+    EdfFile   *file = NULL;
+    GError    *error = NULL;
+    EdfHeader *hdr = NULL;
 
     int          version;
     char        *loc_patient = NULL;
@@ -349,14 +434,10 @@ file_open_reading()
     double       dur_record;
     unsigned int num_signals;
 
-    file  = edf_file_new_for_path(tempfile);
+    file  = edf_file_new_for_path(g_temp_file);
 
     edf_file_read(file, &error);
     g_assert_no_error(error);
-    if (error) {
-        g_printerr("%s:%d oops: %s", __func__, __LINE__, error->message);
-        goto fail;
-    }
 
     hdr = edf_file_header(file);
     g_object_get(
@@ -381,11 +462,9 @@ file_open_reading()
     g_assert_cmpstr(loc_recording, ==, hdr_info.loc_recording);
     g_assert_cmpstr(reserved, ==, hdr_info.reserved);
 
-    // GPtrArray* signals = edf_file_get_signals(file);
+    g_assert_true(check_signal_equality(file, fixture->file));
 
-fail:
     g_object_unref(file);
-    g_free(tempfile);
     g_free(loc_patient);
     g_free(loc_recording);
     g_free(reserved);
@@ -401,6 +480,7 @@ void file_set_signals(void)
 
     file = edf_file_new();
     signals = g_ptr_array_new();
+    g_ptr_array_set_free_func(signals, g_object_unref);
     g_object_get(
         file,
         "header", &header,
@@ -420,25 +500,32 @@ void file_set_signals(void)
     g_assert_true(sig_header == sig_file);
 
     edf_file_destroy(file);
+    edf_header_destroy(header);
+    g_ptr_array_unref(signals);
 }
 
-int main(int argc, char** argv)
+void add_file_suite(void)
 {
-    setlocale(LC_ALL, "");
-
-    g_test_init(&argc, &argv, NULL);
+    g_assert_true(file_test_init() == 0);
 
     g_test_add_func("/EdfFile/create", file_create);
     g_test_add_func("/EdfFile/name", file_name);
     g_test_add_func("/EdfFile/writing", file_open_writing);
-    g_test_add_func(
+    g_test_add(
         "/EdfFile/file_write_with_elaborate_header_and_signals",
-        file_write_with_elaborate_header_and_signals
+        FileFixture,
+        NULL,
+        file_fixture_set_up,
+        file_write_with_elaborate_header_and_signals,
+        file_fixture_tear_down
     );
-    g_test_add_func("/EdfFile/open_reading", file_open_reading);
+    g_test_add(
+        "/EdfFile/open_reading",
+        FileFixture,
+        NULL,
+        file_fixture_set_up,
+        file_open_reading,
+        file_fixture_tear_down
+    );
     g_test_add_func("/EdfFile/set_signals", file_set_signals);
-    file_test_init();
-    int ret = g_test_run();
-    file_test_finalize();
-    return ret;
 }

@@ -29,13 +29,8 @@ header_size(void)
     edf_header_destroy(hdr);
 }
 
-int main(int argc, char** argv)
+void add_header_suite(void)
 {
-    setlocale(LC_ALL, "");
-    g_test_init(&argc, &argv, NULL);
-
     g_test_add_func("/EdfHeader/create", header_create);
     g_test_add_func("/EdfHeader/size",header_size);
-
-    return g_test_run();
 }

@@ -15,50 +15,22 @@
  * along with libgedf.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <CUnit/CUnit.h>
-#include <CUnit/Basic.h>
-#include <assert.h>
-
+#include <glib.h>
+#include <locale.h>
 #include "suites.h"
 
-int add_suites()
+void add_suites()
 {
-    int res;
-
-    res = add_file_suite();
-    if (res)
-        return res;
-
-    res = add_header_suite();
-    if (res)
-        return res;
-    
-    res = add_signal_suite();
-    if (res)
-        return res;
-
-    return res;
+    add_file_suite();
+    add_header_suite();
+    add_signal_suite();
 }
 
 int main(int argc, char** argv) {
-    
-    (void) argc; (void) argv; // prevent compiler warnings.
-
-    if (CU_initialize_registry() != CUE_SUCCESS)
-        return EXIT_FAILURE;
-
-    //CU_basic_set_mode(CU_BRM_VERBOSE);
+    setlocale(LC_ALL, "");
+    g_test_init(&argc, &argv, NULL);
 
     add_suites();
 
-    if(CU_basic_run_tests() != CUE_SUCCESS) {
-        fprintf(stderr, "Unable to run tests\n");
-        return EXIT_FAILURE;
-    }
-
-    CU_cleanup_registry();
-
-    return 0;
+    return g_test_run();
 }
