@@ -155,6 +155,11 @@ edf_header_get_num_signals(EdfHeader* header);
 G_MODULE_EXPORT GPtrArray*
 edf_header_get_signals(EdfHeader* header);
 
+G_MODULE_EXPORT gboolean
+edf_header_is_edf(EdfHeader* header);
+
+G_MODULE_EXPORT gboolean
+edf_header_is_edfplus(EdfHeader* header);
 
 /****** utility functions not directly related to EdfHeader instances ******* */
 

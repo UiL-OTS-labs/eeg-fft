@@ -2089,6 +2089,57 @@ edf_header_get_signals(EdfHeader* header) {
     return priv->signals;
 }
 
+/**
+ * edf_header_is_edf:
+ * @header: the EdfHeader to test whether it is EDF
+ *
+ * The version number should be 0, this discriminates EDF from BDF
+ * EDF+ is compatible with EDF, so an EDF+ header will also be considered
+ * to be EDF.
+ *
+ * Returns: TRUE if the header is EDF or EDF+ false otherwise.
+ */
+gboolean
+edf_header_is_edf(EdfHeader* header)
+{
+    g_return_val_if_fail(EDF_IS_HEADER(header), FALSE);
+    int version = edf_header_get_version(header);
+
+    return version == 0;
+}
+
+/**
+ * edf_header_is_edfplus:
+ * @header: the header to test whether it seems compatible with EDF+
+ *
+ * An EDF+ header is starts the reserved field with "EDF+C" or
+ * "EDF+D", an EDF+ header is a valid EDF header, but a valid EDF file
+ * is doesn't have to be a valid EDF+ file.
+ *
+ * Returns: TRUE if the header is EDF+ compatible
+ */
+gboolean
+edf_header_is_edfplus(EdfHeader* header)
+{
+    g_return_val_if_fail(EDF_IS_HEADER(header), FALSE);
+
+    if (edf_header_get_version(header) != 0)
+        return FALSE;
+
+    const char edf_continuous[] = "EDF+C";
+    const char edf_discontinuous[] = "EDF+D";
+    const char* reserved = edf_header_get_reserved(header);
+
+    // TODO make even more strict on other fields.
+    if (strncmp(edf_continuous, reserved, sizeof(edf_continuous)) != 0 &&
+        strncmp(edf_discontinuous, reserved, sizeof(edf_discontinuous) != 0)
+    ) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
 /* ************ utility functions ************** */
 /* these are not coupled with EdfHeader */
 
