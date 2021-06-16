@@ -37,6 +37,8 @@ G_DECLARE_DERIVABLE_TYPE(EdfSignal, edf_signal, EDF, SIGNAL, GObject)
 
 struct _EdfSignalClass {
     GObjectClass parent_class;
+    /* <private> */
+    void (*append_new_record) (EdfSignal* signal, GError** error);
 };
 
 G_MODULE_EXPORT GQuark
@@ -127,7 +129,13 @@ edf_signal_get_num_records(EdfSignal* signal);
 G_MODULE_EXPORT void
 edf_signal_append_digital(EdfSignal* signal, gint value, GError** error);
 
-GArray*
+G_MODULE_EXPORT gsize
+edf_signal_size(EdfSignal* signal);
+
+G_MODULE_EXPORT gsize
+edf_signal_capacity(EdfSignal* signal);
+
+G_MODULE_EXPORT GArray*
 edf_signal_get_values(EdfSignal* signal);
 
 void edf_signal_write_record_to_ostream(

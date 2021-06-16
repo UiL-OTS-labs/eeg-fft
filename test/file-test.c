@@ -149,6 +149,7 @@ file_fixture_set_up(FileFixture* fixture, gconstpointer data)
     (void) data;
     fixture->file = edf_file_new_for_path(g_temp_file);
     EdfHeader* header = NULL;
+    GError* error = NULL;
 
     g_object_get(G_OBJECT(fixture->file),
                  "header", &header,
@@ -193,8 +194,10 @@ file_fixture_set_up(FileFixture* fixture, gconstpointer data)
                  "reserved", sig_info[1].sig_reserved,
                  NULL
     );
-    edf_file_add_signal(fixture->file, signal1);
-    edf_file_add_signal(fixture->file, signal2);
+    edf_file_add_signal(fixture->file, signal1, &error);
+    g_assert_no_error(error);
+    edf_file_add_signal(fixture->file, signal2, &error);
+    g_assert_no_error(error);
 
     // Fill signals with generated signals
     unsigned sr = sig_info[0].num_samples_per_record;
@@ -204,7 +207,6 @@ file_fixture_set_up(FileFixture* fixture, gconstpointer data)
     double offset = 400;
     double jitter_amplitude = 20;
 
-    GError* error = NULL;
     fill_signal(
         signal1, hz, amplitude, offset, sr, num_samples, jitter_amplitude,
         &error

@@ -21,6 +21,7 @@
 
 void add_suites()
 {
+    add_bdf_file_suite();
     add_file_suite();
     add_header_suite();
     add_signal_suite();

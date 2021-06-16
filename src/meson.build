@@ -1,7 +1,11 @@
 
 gedf_sources = files (
+    'edf-bdf-file.c',
+    'edf-bdf-header.c',
+    'edf-bdf-signal.c',
     'edf-file.c',
     'edf-header.c',
+    'edf-record-priv.c',
     'edf-signal.c'
 )
 

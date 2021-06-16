@@ -3,6 +3,24 @@
 #include <locale.h>
 #include <gedf.h>
 
+
+/* ************ utilities ****************** */
+
+gboolean cmp_double_garray(GArray* a1, GArray* a2)
+{
+    if (a1->len != a2->len)
+        return FALSE;
+
+    for (gsize i = 0 ; i < a1->len; i++) {
+        if (g_array_index(a1, double, i) != g_array_index(a2, double, i))
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
+/* ************ tests ****************** */
+
 static void
 signal_create(void)
 {
@@ -158,6 +176,35 @@ signal_append_digital_range_error(void)
     g_object_unref(signal);
 }
 
+static void
+signal_get_signal()
+{
+    const gsize size = 1024;
+    GError* error = NULL;
+    EdfSignal *sig = edf_signal_new_full(
+        "blaat", "","",0,1024, 0, 1024, "", size
+        );
+    edf_signal_set_num_samples_per_record(sig, 1024);
+    GArray *input  = g_array_sized_new( FALSE, FALSE, sizeof(double), size);
+    for (gsize i = 0; i < size; i++) {
+        gdouble d = (double)i;
+        g_array_append_val(input, d);
+    }
+
+    for (gsize i = 0; i < input->len; i++) {
+        gint dig_value = (gint) g_array_index(input, double, i);
+        edf_signal_append_digital(sig, dig_value, &error);
+    }
+
+    GArray* output = edf_signal_get_values(sig);
+
+    g_assert_true (cmp_double_garray(input, output));
+
+    g_array_unref(input);
+    g_array_unref(output);
+    edf_signal_destroy(sig);
+}
+
 
 void add_signal_suite()
 {
@@ -166,4 +213,5 @@ void add_signal_suite()
     g_test_add_func("/EdfSignal/append_digital",signal_append_digital);
     g_test_add_func("/EdfSignal/append_digital_range_error",
                     signal_append_digital_range_error);
+    g_test_add_func("/EdfSignal/get_vals", signal_get_signal);
 }

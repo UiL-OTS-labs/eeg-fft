@@ -2,127 +2,17 @@
 
 #include "edf-signal.h"
 #include "edf-size-priv.h"
+#include "edf-record-priv.h"
 
 #include "glibconfig.h"
 #include <glib.h>
 #include <gmodule.h>
 #include <errno.h>
 #include <string.h>
+#include <edf-signal-private.h>
 
 G_DEFINE_QUARK(edf_signal_error_quark, edf_signal_error)
 
-
-/*
- * Signals are records after each other. In each
- * record there are a number of samples see
- * _EdfSignalPrivate, the num_samples_per_record (ns)
- * member.
- * This means that for each record ns bytes per sample
- * are recorded.
- */
-
-typedef union {
-    gint16  i16;
-    guint16 u16;
-    gint32  i32;
-    guint32 u32;
-    guint8  array[4];
-} sample_repr;
-
-typedef struct _record {
-    guint8* bytes;          /* the bytes representing the signal */
-    guint   ns;             /* the number of samples in a complete record */
-    guint   sizeof_sample;  /* the number of bytes of one sample */
-    guint   ns_stored;      /* the number of samples currently stored */
-} EdfRecord;
-
-static EdfRecord*
-edf_record_new(guint ns, guint sizeof_sample, GError** error) {
-    g_return_val_if_fail(error != NULL || *error, NULL);
-    EdfRecord* new = malloc(sizeof(EdfRecord));
-    if (!new) {
-        int saved_errno = errno;
-        if (saved_errno == ENOMEM)
-            g_set_error(
-                    error,
-                    EDF_SIGNAL_ERROR,
-                    EDF_SIGNAL_ERROR_ENOMEM,
-                    "Unable to create record: %s",
-                    g_strerror(saved_errno)
-                    );
-        else 
-            g_set_error_literal(
-                    error,
-                    EDF_SIGNAL_ERROR,
-                    EDF_SIGNAL_ERROR_FAILED,
-                    "Unable to allocate EdfRecord"
-                    );
-
-        return new;
-    }
-
-    new->ns_stored = 0;
-    new->sizeof_sample = sizeof_sample;
-    new->ns = ns;
-    new->bytes = calloc(ns , sizeof_sample);
-    if (!new->bytes) {
-        int saved_errno = errno;
-        if (saved_errno == ENOMEM)
-            g_set_error(
-                    error,
-                    EDF_SIGNAL_ERROR,
-                    EDF_SIGNAL_ERROR_ENOMEM,
-                    "Unable to create record: %s",
-                    g_strerror(saved_errno)
-                    );
-        else 
-            g_set_error_literal(
-                    error,
-                    EDF_SIGNAL_ERROR,
-                    EDF_SIGNAL_ERROR_FAILED,
-                    "Unable to allocate EdfRecord"
-                    );
-
-        g_free(new);
-        new = NULL;
-    }
-    
-    return new;
-}
-
-static void
-edf_record_destroy(EdfRecord* record)
-{
-    g_free(record->bytes);
-    g_free(record);
-}
-
-static gsize
-edf_record_size(const EdfRecord* record)
-{
-    return record->ns_stored;
-}
-
-static void
-edf_record_append(EdfRecord* record, gint value)
-{
-    sample_repr repr;
-    repr.i16 = GINT16_TO_LE(value);
-    memcpy(&record->bytes[record->sizeof_sample * record->ns_stored],
-            repr.array,
-            sizeof(repr.i16)
-          );
-    record->ns_stored++;
-}
-
-int
-edf_record_get(EdfRecord* record, guint index)
-{
-    sample_repr repr;
-    memcpy(repr.array, &record->bytes[index * record->sizeof_sample], record->sizeof_sample);
-    repr.u16 = GUINT16_FROM_LE(repr.u16);
-    return repr.i16;
-}
 
 typedef struct _EdfSignalPrivate {
     /* recording info.*/
@@ -192,7 +82,32 @@ edf_signal_finalize(GObject* gobject)
     g_string_free(priv->reserved, TRUE);
     
     // Chain up to parent
-    G_OBJECT_CLASS(edf_signal_parent_class)->dispose(gobject);
+    G_OBJECT_CLASS(edf_signal_parent_class)->finalize(gobject);
+}
+
+static void
+append_new_record(EdfSignal* self, GError **error)
+{
+    EdfSignalPrivate *priv = edf_signal_get_instance_private(self);
+    EdfRecord* rec = edf_record_new(
+        priv->num_samples_per_record, sizeof(gint16), error
+    );
+    if (*error) {
+        g_assert(rec == NULL);
+        return;
+    }
+    edf_signal_append_record(self, rec);
+}
+
+void
+edf_signal_append_record(EdfSignal* self, EdfRecord *rec)
+{
+    g_return_if_fail(EDF_IS_SIGNAL(self));
+    g_return_if_fail(rec != NULL);
+
+    EdfSignalPrivate *priv = edf_signal_get_instance_private(self);
+
+    g_ptr_array_add(priv->records, rec);
 }
 
 typedef enum {
@@ -332,6 +247,8 @@ edf_signal_class_init(EdfSignalClass* klass)
     object_class->dispose = edf_signal_dispose;
     object_class->finalize = edf_signal_finalize;
 
+    klass->append_new_record = append_new_record;
+
     edf_signal_properties[PROP_LABEL] = g_param_spec_string(
             "label",
             "Label",
@@ -453,51 +370,6 @@ edf_signal_class_init(EdfSignalClass* klass)
     g_object_class_install_properties(
             object_class, N_PROPERTIES, edf_signal_properties
             );
-}
-
-static gsize
-signal_capacity(EdfSignal* signal)
-{
-    EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
-    return priv->records->len * priv->num_samples_per_record;
-}
-
-static gsize
-signal_size (EdfSignal* signal)
-{
-    EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
-    gsize size = 0;
-    if (priv->records->len == 0)
-        return size;
-
-    EdfRecord* record = g_ptr_array_index(priv->records, priv->records->len -1);
-
-    size = (priv->records->len - 1) * priv->num_samples_per_record;
-    size += edf_record_size(record);
-    return size;
-}
-
-
-static void
-signal_append_private(EdfSignal* signal, gint value, GError** error)
-{
-    EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
-    gsize capacity, size;
-    EdfRecord* rec = NULL;
-    capacity = signal_capacity(signal);
-    size = signal_size(signal);
-
-    g_assert(size <= capacity);
-    if (size == capacity) {
-        rec = edf_record_new(priv->num_samples_per_record, sizeof(gint16), error);
-        if (*error) {
-            g_assert(rec == NULL);
-            return;
-        }
-        g_ptr_array_add(priv->records, rec);
-    }
-    rec = g_ptr_array_index(priv->records, priv->records->len - 1);
-    edf_record_append(rec, value);
 }
 
 /**
@@ -873,8 +745,10 @@ edf_signal_append_digital(EdfSignal* signal, gint value, GError** error)
 {
     g_return_if_fail(EDF_IS_SIGNAL(signal));
     g_return_if_fail(error != NULL && *error == NULL);
-
     EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
+    EdfSignalClass* klass = EDF_SIGNAL_GET_CLASS(signal);
+    EdfRecord* rec = NULL;
+    gsize capacity, size;
 
     if (value > priv->digital_max || value < priv->digital_min) {
         g_set_error(
@@ -886,7 +760,19 @@ edf_signal_append_digital(EdfSignal* signal, gint value, GError** error)
                 );
         return;
     }
-    signal_append_private(signal, value, error);
+
+    capacity = edf_signal_capacity(signal);
+    size = edf_signal_size(signal);
+    g_assert(size <= capacity);
+    if (size == capacity) {
+        klass->append_new_record(signal, error);
+        if (*error) {
+            return;
+        }
+    }
+
+    rec = g_ptr_array_index(priv->records, priv->records->len - 1);
+    edf_record_append(rec, value);
 }
 
 /**
@@ -997,7 +883,7 @@ edf_signal_get_values(EdfSignal* signal)
     g_return_val_if_fail(ret, NULL);
 
     int dig_min = edf_signal_get_digital_min(signal);
-    int dig_max = edf_signal_get_digital_min(signal);
+    int dig_max = edf_signal_get_digital_max(signal);
     double phys_min = edf_signal_get_physical_min(signal);
     double phys_max = edf_signal_get_physical_max(signal);
     double phys_span = phys_max - phys_min;
@@ -1092,4 +978,25 @@ fail:
     return numread;
 }
 
+gsize
+edf_signal_capacity(EdfSignal* signal)
+{
+    EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
+    return priv->records->len * priv->num_samples_per_record;
+}
+
+gsize
+edf_signal_size (EdfSignal* signal)
+{
+    EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
+    gsize size = 0;
+    if (priv->records->len == 0)
+        return size;
+
+    EdfRecord* record = g_ptr_array_index(priv->records, priv->records->len -1);
+
+    size = (priv->records->len - 1) * priv->num_samples_per_record;
+    size += edf_record_size(record);
+    return size;
+}
 

@@ -2,6 +2,7 @@
 math_dep = cc.find_library('m', required : false)
 
 unit_sources = files(
+    'bdf-file-test.c',
     'file-test.c',
     'header-test.c',
     'signal-test.c',
