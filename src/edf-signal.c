@@ -297,8 +297,8 @@ edf_signal_class_init(EdfSignalClass* klass)
             "digital-min",
             "digital-minimum",
             "The digital minimum of an signal",
-            G_MININT16,
-            G_MAXINT16,
+            -8388608,
+            8388607,
             0,
             G_PARAM_READWRITE
             );
@@ -307,8 +307,8 @@ edf_signal_class_init(EdfSignalClass* klass)
             "digital-max",
             "digital-maximum",
             "The digital maximum of an signal",
-            G_MININT16,
-            G_MAXINT16,
+            -8388608,
+            8388607,
             0,
             G_PARAM_READWRITE
             );
@@ -647,13 +647,18 @@ edf_signal_get_digital_min(EdfSignal* signal)
  * @signal: the input signal
  * @min: The minimum this value should be less than the max
  *
- * set the digital minimum of the signal which is typically the lowest
- * value obtained from an ADC.
+ * Set the digital minimum of the signal which is typically the lowest
+ * value obtained from an ADC. Notice that EDF supports values in the range
+ * [-32768, 32767], however other subclasses might support a smaller or
+ * larger range.
+ * If the value cannot be set to a specific value, because it falls out of the
+ * valid range, the value should be clipped to fit the domain.
  */
 void
 edf_signal_set_digital_min(EdfSignal* signal, gint min)
 {
     g_return_if_fail(EDF_IS_SIGNAL(signal));
+    EdfSignalClass* class = EDF_SIGNAL_GET_CLASS(signal);
 
     EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
     priv->digital_min = min;

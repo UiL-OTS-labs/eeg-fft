@@ -458,8 +458,8 @@ edf_file_read(EdfFile* file, GError** error)
                 goto fail;
         }
     }
-fail:
     g_object_unref(ifstream);
+    fail:
     return num_bytes_tot;
 }
 
