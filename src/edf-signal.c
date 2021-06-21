@@ -346,7 +346,7 @@ edf_signal_class_init(EdfSignalClass* klass)
         1,
         8,
         2,
-        G_PARAM_READWRITE| G_PARAM_CONSTRUCT_ONLY | G_PARAM_PRIVATE
+        G_PARAM_READWRITE| G_PARAM_CONSTRUCT_ONLY
     );
 
     edf_signal_properties[PROP_NUM_RECORDS] = g_param_spec_uint(
@@ -658,7 +658,6 @@ void
 edf_signal_set_digital_min(EdfSignal* signal, gint min)
 {
     g_return_if_fail(EDF_IS_SIGNAL(signal));
-    EdfSignalClass* class = EDF_SIGNAL_GET_CLASS(signal);
 
     EdfSignalPrivate* priv = edf_signal_get_instance_private(signal);
     priv->digital_min = min;
