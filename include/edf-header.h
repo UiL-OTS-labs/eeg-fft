@@ -5,10 +5,12 @@
 #include <glib-object.h>
 #include <gmodule.h>
 #include <gio/gio.h>
+#include "edf-signal.h"
 
 G_BEGIN_DECLS
 
 #define EDF_HEADER_ERROR edf_header_error_quark()
+G_MODULE_EXPORT GQuark edf_header_error_quark();
 
 /**
  * EdfHeaderError:
@@ -31,6 +33,8 @@ G_DECLARE_DERIVABLE_TYPE(EdfHeader, edf_header, EDF, HEADER, GObject)
 
 struct _EdfHeaderClass {
     GObjectClass parent_class;
+
+    EdfSignal* (*alloc_signal)();
 
     // reading a header
     gsize (*read_version) (EdfHeader* hdr, GInputStream* stream, GError** error);
@@ -109,6 +113,9 @@ edf_header_read_from_input_stream(
 
 G_MODULE_EXPORT gint
 edf_header_get_version(EdfHeader* header);
+
+void
+edf_header_set_version(EdfHeader* header, gint version);
 
 G_MODULE_EXPORT const gchar*
 edf_header_get_patient(EdfHeader* header);

@@ -37,6 +37,13 @@ typedef struct _EdfHeaderPrivate {
 G_DEFINE_TYPE_WITH_PRIVATE(EdfHeader, edf_header, G_TYPE_OBJECT)
 
 /* *********** helpers for the properties ************* */
+
+static EdfSignal*
+alloc_signal(void)
+{
+    return g_object_new(EDF_TYPE_SIGNAL, NULL);
+}
+
 static void
 set_patient_identification(EdfHeader* hdr, const gchar* info)
 {
@@ -127,11 +134,12 @@ static void
 set_num_signals(EdfHeader* hdr, gint num_signals)
 {
     EdfHeaderPrivate* priv = edf_header_get_instance_private(hdr);
+    EdfHeaderClass* klass = EDF_HEADER_GET_CLASS(hdr);
     g_return_if_fail(num_signals >= 0 && num_signals < 9999);
 
     g_ptr_array_set_size(priv->signals, num_signals);
-    for (gsize i = 0; i < (gsize)num_signals; i++) {
-        EdfSignal* signal = edf_signal_new();
+    for (int i = 0; i < num_signals; i++) {
+        EdfSignal* signal = klass->alloc_signal();
         g_ptr_array_index(priv->signals, i) = signal;
     }
 }
@@ -587,6 +595,8 @@ read_num_signals (EdfHeader* hdr, GInputStream* stream, GError** error)
     char  temp[256];
     gsize nread = 0;
     gint  num_signals;
+    EdfHeaderClass* klass = EDF_HEADER_GET_CLASS(hdr);
+    g_return_val_if_fail(klass->alloc_signal, 0);
 
     if (
         g_input_stream_read_all (
@@ -599,6 +609,7 @@ read_num_signals (EdfHeader* hdr, GInputStream* stream, GError** error)
     }
     temp[EDF_NUM_SIGNALS_SZ] = '\0';
     num_signals = g_ascii_strtoll(temp, NULL, 10);
+
     set_num_signals(hdr, num_signals);
     return nread;
 }
@@ -1413,6 +1424,8 @@ edf_header_class_init(EdfHeaderClass* klass)
     object_class->dispose = edf_header_dispose;
     object_class->finalize = edf_header_finalize;
 
+    klass->alloc_signal = alloc_signal;
+
     // Reading the fixed header from file
     klass->read_version = read_version;
     klass->read_patient = read_patient;
@@ -1819,6 +1832,24 @@ edf_header_get_version(EdfHeader* header)
 
     priv = edf_header_get_instance_private (header);
     return priv->version;
+}
+
+/**
+ * edf_header_set_version:
+ * @header: the instance to set the version of
+ * @version: the version.
+ *
+ * Note this function is for mainly for internal use.
+ * Used by EdfBdfHeader e.g. because it stores 255 in
+ * fields that should be ascii which valid range is 0 <= ascii < 128.
+ */
+void
+edf_header_set_version(EdfHeader* header, gint version)
+{
+    g_return_if_fail(EDF_IS_HEADER(header));
+
+    EdfHeaderPrivate *priv = edf_header_get_instance_private(header);
+    priv->version = version;
 }
 
 /**

@@ -2,7 +2,13 @@
 #include "edf-file.h"
 #include "edf-header.h"
 #include "edf-signal.h"
+#include "edf-bdf-signal.h"
+#include "edf-bdf-file.h"
+#include "edf-bdf-header.h"
 #include <gio/gio.h>
+
+G_DEFINE_QUARK(edf_file_error_quark, edf_file_error)
+
 
 /**
  * SECTION:edf-file
@@ -20,9 +26,33 @@ typedef struct _EdfFilePrivate {
     GFile*      file;
     EdfHeader*  header;
     GPtrArray*  signals;
-}EdfFilePrivate;
+} EdfFilePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE(EdfFile, edf_file, G_TYPE_OBJECT)
+
+static EdfHeader*
+alloc_header()
+{
+    return edf_header_new();
+}
+
+static gboolean
+add_signal(EdfFile* self, EdfSignal* signal, GError** error)
+{
+    EdfFilePrivate* priv = edf_file_get_instance_private(self);
+    if (EDF_IS_SIGNAL(signal) && !EDF_IS_BDF_SIGNAL(signal))
+        g_ptr_array_add(priv->signals, g_object_ref(signal));
+    else {
+        g_set_error(
+            error,
+            EDF_FILE_ERROR,
+            EdfFileErrorSignal,
+            "The signal is incompatible with the filetype."
+        );
+        return FALSE;
+    }
+    return TRUE;
+}
 
 typedef enum {
     PROP_FILENAME = 1,
@@ -36,9 +66,22 @@ static void
 edf_file_init(EdfFile* file)
 {
     EdfFilePrivate* priv = edf_file_get_instance_private(file);
+
+    priv->header = NULL; // installed in constructed, for otherwise it can't
+                         // install Headers for derived files...
+
     priv->file = g_file_new_for_path("");
-    priv->header = edf_header_new();
     priv->signals = g_ptr_array_new_full(0, g_object_unref);
+}
+
+static void
+edf_file_constructed(GObject* self)
+{
+    EdfFile* file = EDF_FILE(self);
+    EdfFilePrivate* priv = edf_file_get_instance_private(file);
+    EdfFileClass* klass = EDF_FILE_GET_CLASS(file);
+    g_return_if_fail(klass->alloc_header);
+    priv->header = klass->alloc_header();
     edf_header_set_signals(priv->header, priv->signals);
 }
 
@@ -193,8 +236,13 @@ edf_file_class_init(EdfFileClass* klass)
     object_class->set_property = edf_file_set_property;
     object_class->get_property = edf_file_get_property;
 
+    object_class->constructed = edf_file_constructed;
+
     object_class->dispose  = edf_file_dispose;
     object_class->finalize = edf_file_finalize;
+
+    klass->alloc_header = alloc_header;
+    klass->add_signal = add_signal;
 
     /**
      * EdfFile:path:
@@ -227,7 +275,7 @@ edf_file_class_init(EdfFileClass* klass)
             );
 
     /**
-     * EdfFile:signals:
+     * EdfFile:signals:(type GPtrArray(EdfSignal))
      *
      * Every file contains (hopefully) some signals that contain
      * the actual data of one transducer. The signals document
@@ -410,8 +458,8 @@ edf_file_read(EdfFile* file, GError** error)
                 goto fail;
         }
     }
-fail:
     g_object_unref(ifstream);
+    fail:
     return num_bytes_tot;
 }
 
@@ -484,20 +532,23 @@ edf_file_replace(EdfFile* file, GError**error)
  * edf_file_add_signal:
  * @self:The #EdfFile to which you would like to add a signal
  * @signal:(in)(transfer full): The #EdfSignal you would like to add
+ * @error:(out)(transfer full): If an error occurs, eg, A BdfSignal
+ *                              added to an edf file an error might be
+ *                              returned here.
  *
  * The file will add the signal to its collection of signals, the
  * reference count of the signal is incremented. So you can release
  * your reference to the signals.
  */
 void
-edf_file_add_signal(EdfFile* file, EdfSignal* signal)
+edf_file_add_signal(EdfFile* file, EdfSignal* signal, GError** error)
 {
     g_return_if_fail(EDF_IS_FILE(file));
     g_return_if_fail(EDF_IS_SIGNAL(signal));
+    EdfFileClass *klass = EDF_FILE_GET_CLASS(file);
+    g_return_if_fail(klass->add_signal);
 
-    EdfFilePrivate* priv = edf_file_get_instance_private(file);
-
-    g_ptr_array_add(priv->signals, g_object_ref(signal));
+    klass->add_signal(file, signal, error);
 }
 
 /**
