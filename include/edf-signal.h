@@ -38,7 +38,8 @@ G_DECLARE_DERIVABLE_TYPE(EdfSignal, edf_signal, EDF, SIGNAL, GObject)
 struct _EdfSignalClass {
     GObjectClass parent_class;
     /* <private> */
-    void (*append_new_record) (EdfSignal* signal, GError** error);
+    void  (*append_new_record) (EdfSignal* signal, GError** error);
+    gsize (*sample_size) (void);
 };
 
 G_MODULE_EXPORT GQuark

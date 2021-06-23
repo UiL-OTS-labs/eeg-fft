@@ -26,7 +26,6 @@ typedef struct _EdfSignalPrivate {
     GString*    prefiltering;
     gint        num_samples_per_record;
     GString*    reserved;
-    guint       sample_size;
     GPtrArray*  records;
 } EdfSignalPrivate;
 
@@ -99,6 +98,12 @@ append_new_record(EdfSignal* self, GError **error)
     edf_signal_append_record(self, rec);
 }
 
+static gsize
+sample_size()
+{
+    return 2;
+}
+
 void
 edf_signal_append_record(EdfSignal* self, EdfRecord *rec)
 {
@@ -136,7 +141,6 @@ edf_signal_set_property (
     )
 {
     EdfSignal* self = EDF_SIGNAL(object);
-    EdfSignalPrivate* priv = edf_signal_get_instance_private(self);
 
     switch ((EdfSignalProperty) propid) {
         case PROP_LABEL:
@@ -169,9 +173,6 @@ edf_signal_set_property (
         case PROP_RESERVED:
             edf_signal_set_reserved(self, g_value_get_string(value));
             break;
-        case PROP_SAMPLE_SIZE:
-            priv->sample_size = g_value_get_uint(value);
-            break;
         case PROP_NUM_RECORDS: // Read only
         case PROP_SIGNAL: // Read only
         default:
@@ -189,6 +190,7 @@ edf_signal_get_property (
 {
     EdfSignal* self = EDF_SIGNAL(object);
     EdfSignalPrivate* priv = edf_signal_get_instance_private(self);
+    EdfSignalClass* klass = EDF_SIGNAL_GET_CLASS(self);
 
     switch ((EdfSignalProperty) propid) {
         case PROP_LABEL:
@@ -222,7 +224,7 @@ edf_signal_get_property (
             g_value_set_string(value, priv->reserved->str);
             break;
         case PROP_SAMPLE_SIZE:
-            g_value_set_uint(value, priv->sample_size);
+            g_value_set_uint(value, klass->sample_size());
             break;
         case PROP_NUM_RECORDS:
             g_value_set_int(value, edf_signal_get_num_records(self));
@@ -248,6 +250,7 @@ edf_signal_class_init(EdfSignalClass* klass)
     object_class->finalize = edf_signal_finalize;
 
     klass->append_new_record = append_new_record;
+    klass->sample_size       = sample_size;
 
     edf_signal_properties[PROP_LABEL] = g_param_spec_string(
             "label",
@@ -346,7 +349,7 @@ edf_signal_class_init(EdfSignalClass* klass)
         1,
         8,
         2,
-        G_PARAM_READWRITE| G_PARAM_CONSTRUCT_ONLY
+        G_PARAM_READABLE
     );
 
     edf_signal_properties[PROP_NUM_RECORDS] = g_param_spec_uint(
@@ -951,14 +954,15 @@ edf_signal_read_record_from_istream(
 {
     g_return_val_if_fail(EDF_IS_SIGNAL(signal) && G_IS_INPUT_STREAM(istream), 0);
     g_return_val_if_fail(error && *error == NULL, 0);
+    EdfSignalClass* klass = EDF_SIGNAL_GET_CLASS(signal);
 
     gsize numread = 0;
     EdfSignalPrivate *priv = edf_signal_get_instance_private(signal);
-    gsize memchunksize = priv->num_samples_per_record * priv->sample_size;
+    gsize memchunksize = priv->num_samples_per_record * klass->sample_size();
 
     EdfRecord* record = edf_record_new (
         priv->num_samples_per_record,
-        priv->sample_size,
+        klass->sample_size(),
         error
     );
 

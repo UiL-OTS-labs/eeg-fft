@@ -28,6 +28,12 @@ append_new_record(EdfSignal* self, GError** error)
     edf_signal_append_record(self, rec);
 }
 
+static gsize
+sample_size()
+{
+    return 3;
+}
+
 static void
 edf_bdf_signal_init(EdfBdfSignal* self)
 {
@@ -41,10 +47,8 @@ typedef enum {
     PROP_NULL,
     PROP_DIGITAL_MAX,
     PROP_DIGITAL_MIN,
-    N_PROPERTIES
+    N_PROPERTIES = PROP_NULL
 } EdfBdfSignalProperty;
-
-static GParamSpec* obj_properties[N_PROPERTIES] = {0};
 
 static void
 set_property (
@@ -96,30 +100,8 @@ edf_bdf_signal_class_init(EdfBdfSignalClass* klass)
     EdfSignalClass* signal_class = EDF_SIGNAL_CLASS(klass);
 
     signal_class->append_new_record = append_new_record;
-
-    obj_properties[PROP_DIGITAL_MAX] = g_param_spec_int(
-        "bdf-digital-max",
-        "Digital-Max",
-        "The digital maximum of a BdfFile.",
-        -8388608,
-        8388607,
-        0,
-        G_PARAM_READWRITE | G_PARAM_CONSTRUCT
-        );
-
-    obj_properties[PROP_DIGITAL_MIN] = g_param_spec_int(
-        "bdf-digital-min",
-        "Digital-Min",
-        "The digital minimum of a BdfFile.",
-        -8388608,
-        8388607,
-        0,
-        G_PARAM_READWRITE | G_PARAM_CONSTRUCT
-    );
+    signal_class->sample_size       = sample_size;
 
     g_object_class_override_property(object_class, PROP_DIGITAL_MAX, "digital-max");
     g_object_class_override_property(object_class, PROP_DIGITAL_MIN, "digital-min");
-
-    g_object_class_install_properties(object_class, N_PROPERTIES, obj_properties);
-
 }

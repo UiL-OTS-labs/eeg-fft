@@ -36,7 +36,7 @@ bdf_open_256(void)
     g_assert_nonnull(signals);
     g_assert_true (signals->len > 0);
 
-    g_ptr_array_unref(signals);
+    //g_ptr_array_unref(signals);
     edf_bdf_file_destroy(bdffile);
 }
 
@@ -54,7 +54,10 @@ bdf_open_2048(void)
     g_assert_nonnull(signals);
     g_assert_true (signals->len > 0);
 
-    g_ptr_array_unref(signals);
+    GArray* values = edf_signal_get_values((EDF_SIGNAL(g_ptr_array_index(signals, 0))));
+    g_assert_nonnull(values);
+    g_array_unref(values);
+
     edf_bdf_file_destroy(bdffile);
 }
 
